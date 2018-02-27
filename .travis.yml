@@ -22,26 +22,28 @@ language: cpp
 # entries below.
 matrix:
   include:
-    - os: osx
-      osx_image: xcode8.3
-      compiler: clang
-      env: CFG=mac-clang-x86_64-release GN_ARGS="is_debug=false"
-    - os: osx
-      osx_image: xcode8.3
-      compiler: clang
-      env: CFG=mac-clang-x86_64-debug GN_ARGS="is_debug=true"
-    - os: osx
-      osx_image: xcode8.3
-      compiler: clang
-      env: CFG=mac-clang-x86_64-asan GN_ARGS="is_debug=false is_asan=true"
-    - os: osx
-      osx_image: xcode8.3
-      compiler: clang
-      env: CFG=mac-clang-x86_64-tsan GN_ARGS="is_debug=false is_tsan=true"
-    - os: osx
-      osx_image: xcode8.3
-      compiler: clang
-      env: CFG=mac-clang-x86_64-ubsan GN_ARGS="is_debug=false is_ubsan=true"
+# OS X builds are processing too slow and block the queue.
+# Commenting out until the problem is resolved.
+#    - os: osx
+#      osx_image: xcode8.3
+#      compiler: clang
+#      env: CFG=mac-clang-x86_64-release GN_ARGS="is_debug=false"
+#    - os: osx
+#      osx_image: xcode8.3
+#      compiler: clang
+#      env: CFG=mac-clang-x86_64-debug GN_ARGS="is_debug=true"
+#    - os: osx
+#      osx_image: xcode8.3
+#      compiler: clang
+#      env: CFG=mac-clang-x86_64-asan GN_ARGS="is_debug=false is_asan=true"
+#    - os: osx
+#      osx_image: xcode8.3
+#      compiler: clang
+#      env: CFG=mac-clang-x86_64-tsan GN_ARGS="is_debug=false is_tsan=true"
+#    - os: osx
+#      osx_image: xcode8.3
+#      compiler: clang
+#      env: CFG=mac-clang-x86_64-ubsan GN_ARGS="is_debug=false is_ubsan=true"
     - os: linux
       dist: trusty
       sudo: false
@@ -53,12 +55,12 @@ matrix:
         apt:
           packages:
             - clang
-      env: CFG=linux_trusty-clang-x86_64-debug GN_ARGS="is_debug=true"
+      env: CFG=linux_trusty-clang-x86_64-debug GN_ARGS="is_debug=true is_hermetic_clang=false"
     - os: linux
       dist: trusty
       sudo: true
       compiler: clang
-      env: CFG=linux_trusty-clang-x86_64-asan GN_ARGS="is_debug=false is_asan=true"
+      env: CFG=linux_trusty-clang-x86_64-asan GN_ARGS="is_debug=false is_asan=true use_libfuzzer=true"
     - os: linux
       dist: trusty
       sudo: false
@@ -146,7 +148,8 @@ script:
   - tools/ninja -C out/dist -j8 all
   - |
     TEST_TARGETS="
-    perfetto_tests
+    perfetto_integrationtests
+    perfetto_unittests
     perfetto_benchmarks
     "
     if [[ "$CFG" != android-* ]]; then

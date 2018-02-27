@@ -1,0 +1,62 @@
+/*
+ * Copyright (C) 2017 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+option optimize_for = LITE_RUNTIME;
+
+import "perfetto/trace/ftrace/clock_disable.proto";
+import "perfetto/trace/ftrace/clock_enable.proto";
+import "perfetto/trace/ftrace/clock_set_rate.proto";
+import "perfetto/trace/ftrace/cpu_frequency.proto";
+import "perfetto/trace/ftrace/cpu_idle.proto";
+import "perfetto/trace/ftrace/cpu_frequency_limits.proto";
+import "perfetto/trace/ftrace/cpufreq_interactive_already.proto";
+import "perfetto/trace/ftrace/cpufreq_interactive_boost.proto";
+import "perfetto/trace/ftrace/cpufreq_interactive_notyet.proto";
+import "perfetto/trace/ftrace/cpufreq_interactive_setspeed.proto";
+import "perfetto/trace/ftrace/cpufreq_interactive_target.proto";
+import "perfetto/trace/ftrace/cpufreq_interactive_unboost.proto";
+import "perfetto/trace/ftrace/print.proto";
+import "perfetto/trace/ftrace/sched_switch.proto";
+
+package perfetto.protos;
+
+message FtraceEvent {
+  // Nanoseconds since an epoch.
+  // Epoch is configurable by writing into trace_clock.
+  // By default this timestamp is CPU local.
+  // TODO: Figure out a story for reconciling the various clocks.
+  optional uint64 timestamp = 1;
+
+  optional uint32 pid = 2;
+
+  oneof event {
+    PrintFtraceEvent print = 3;
+    SchedSwitchFtraceEvent sched_switch = 4;
+    CpufreqInteractiveAlreadyFtraceEvent cpu_freq_interactive_already = 5;
+    CpufreqInteractiveBoostFtraceEvent cpu_freq_interactive_boost = 6;
+    CpufreqInteractiveNotyetFtraceEvent cpu_freq_interactive_notyet = 7;
+    CpufreqInteractiveSetspeedFtraceEvent cpu_freq_interactive_setspeed = 8;
+    CpufreqInteractiveTargetFtraceEvent cpu_freq_interactive_target = 9;
+    CpufreqInteractiveUnboostFtraceEvent cpu_freq_interactive_unboost = 10;
+    CpuFrequencyFtraceEvent cpu_frequency = 11;
+    CpuFrequencyLimitsFtraceEvent cpu_frequency_limits = 12;
+    CpuIdleFtraceEvent cpu_idle = 13;
+    ClockEnableFtraceEvent clock_enable = 14;
+    ClockDisableFtraceEvent clock_disable = 15;
+    ClockSetRateFtraceEvent clock_set_rate = 16;
+  }
+}

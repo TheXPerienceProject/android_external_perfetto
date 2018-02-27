@@ -19,22 +19,23 @@
 #include <utility>
 
 #include "perfetto/base/logging.h"
+#include "perfetto/base/utils.h"
 #include "proto_translation_table.h"
 
-#include "protos/ftrace/ftrace_event.pbzero.h"
-#include "protos/ftrace/print.pbzero.h"
-#include "protos/ftrace/sched_switch.pbzero.h"
+#include "perfetto/trace/ftrace/ftrace_event.pbzero.h"
+#include "perfetto/trace/ftrace/print.pbzero.h"
+#include "perfetto/trace/ftrace/sched_switch.pbzero.h"
 
-#include "protos/ftrace/ftrace_event_bundle.pbzero.h"
+#include "perfetto/trace/ftrace/ftrace_event_bundle.pbzero.h"
 
 namespace perfetto {
 
 namespace {
 
-static bool ReadIntoString(const uint8_t* start,
-                           const uint8_t* end,
-                           size_t field_id,
-                           protozero::ProtoZeroMessage* out) {
+bool ReadIntoString(const uint8_t* start,
+                    const uint8_t* end,
+                    size_t field_id,
+                    protozero::ProtoZeroMessage* out) {
   for (const uint8_t* c = start; c < end; c++) {
     if (*c != '\0')
       continue;
@@ -67,8 +68,6 @@ const uint32_t kTypeDataTypeLengthMax = 28;
 const uint32_t kTypePadding = 29;
 const uint32_t kTypeTimeExtend = 30;
 const uint32_t kTypeTimeStamp = 31;
-
-const size_t kPageSize = 4096;
 
 struct PageHeader {
   uint64_t timestamp;
@@ -111,12 +110,12 @@ bool CpuReader::Drain(const std::array<const EventFilter*, kMaxSinks>& filters,
 
   uint8_t* buffer = GetBuffer();
   // TOOD(hjd): One read() per page may be too many.
-  long bytes = PERFETTO_EINTR(read(fd_.get(), buffer, kPageSize));
+  long bytes = PERFETTO_EINTR(read(fd_.get(), buffer, base::kPageSize));
   if (bytes == -1 && errno == EAGAIN)
     return false;
-  if (bytes != kPageSize)
+  if (bytes != base::kPageSize)
     return false;
-  PERFETTO_CHECK(static_cast<size_t>(bytes) <= kPageSize);
+  PERFETTO_CHECK(static_cast<size_t>(bytes) <= base::kPageSize);
 
   size_t evt_size = 0;
   for (size_t i = 0; i < kMaxSinks; i++) {
@@ -127,7 +126,7 @@ bool CpuReader::Drain(const std::array<const EventFilter*, kMaxSinks>& filters,
   }
 
   // TODO(hjd): Introduce enum to distinguish real failures.
-  return evt_size > (kPageSize / 2);
+  return evt_size > (base::kPageSize / 2);
 }
 
 CpuReader::~CpuReader() = default;
@@ -135,7 +134,7 @@ CpuReader::~CpuReader() = default;
 uint8_t* CpuReader::GetBuffer() {
   // TODO(primiano): Guard against overflows, like BufferedFrameDeserializer.
   if (!buffer_)
-    buffer_ = std::unique_ptr<uint8_t[]>(new uint8_t[kPageSize]);
+    buffer_ = std::unique_ptr<uint8_t[]>(new uint8_t[base::kPageSize]);
   return buffer_.get();
 }
 
@@ -153,7 +152,7 @@ size_t CpuReader::ParsePage(size_t cpu,
                             protos::pbzero::FtraceEventBundle* bundle,
                             const ProtoTranslationTable* table) {
   const uint8_t* const start_of_page = ptr;
-  const uint8_t* const end_of_page = ptr + kPageSize;
+  const uint8_t* const end_of_page = ptr + base::kPageSize;
 
   bundle->set_cpu(cpu);
 
@@ -197,7 +196,7 @@ size_t CpuReader::ParsePage(size_t cpu,
         if (!ReadAndAdvance<uint32_t>(&ptr, end, &time_delta_ext))
           return 0;
         // See https://goo.gl/CFBu5x
-        timestamp += ((uint64_t)time_delta_ext) << 27;
+        timestamp += (static_cast<uint64_t>(time_delta_ext)) << 27;
         break;
       }
       case kTypeTimeStamp: {
@@ -257,19 +256,20 @@ bool CpuReader::ParseEvent(uint16_t ftrace_event_id,
     return false;
   }
 
+  bool success = true;
   for (const Field& field : table->common_fields())
-    ParseField(field, start, end, message);
+    success &= ParseField(field, start, end, message);
 
   protozero::ProtoZeroMessage* nested =
       message->BeginNestedMessage<protozero::ProtoZeroMessage>(
           info.proto_field_id);
 
   for (const Field& field : info.fields)
-    ParseField(field, start, end, nested);
+    success &= ParseField(field, start, end, nested);
 
   // This finalizes |nested| automatically.
   message->Finalize();
-  return true;
+  return success;
 }
 
 // Caller must guarantee that the field fits in the range,
@@ -307,6 +307,9 @@ bool CpuReader::ParseField(const Field& field,
     case kCStringToString:
       // TODO(hjd): Kernel-dive to check this how size:0 char fields work.
       return ReadIntoString(field_start, end, field.proto_field_id, message);
+    case kStringPtrToString:
+      // TODO(hjd): Figure out how to read these.
+      return true;
   }
   // Not reached, for gcc.
   PERFETTO_CHECK(false);

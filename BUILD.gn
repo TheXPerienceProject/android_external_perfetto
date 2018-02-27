@@ -25,32 +25,38 @@ assert(!monolithic_binaries || !build_with_android)
 group("all") {
   testonly = true  # allow to build also test targets
   deps = [
-    ":perfetto_tests",
+    ":perfetto_unittests",
     "src/ipc/protoc_plugin:ipc_plugin($host_toolchain)",
     "src/protozero/protoc_plugin($host_toolchain)",
     "tools/ftrace_proto_gen:ftrace_proto_gen",
     "tools/proto_to_cpp",
+    "tools/trace_to_text",
   ]
   if (!build_with_chromium) {
     deps += [
       ":perfetto",
       ":perfetto_benchmarks",
+      ":perfetto_integrationtests",
       ":traced",
       ":traced_probes",
-      "src/ftrace_reader:ftrace_reader_integrationtests",
+      "protos/perfetto/config:merged_config",  # For syntax-checking the proto.
+      "test/configs",
+      "tools:protoc_helper",
     ]
   }
 }
 
-executable("perfetto_tests") {
+executable("perfetto_unittests") {
   testonly = true
   deps = [
     "gn:default_deps",
+    "gn:gtest_main",
     "src/base:base_unittests",
     "src/ftrace_reader:ftrace_reader_unittests",
     "src/ipc:perfetto_ipc_unittests",
     "src/protozero:protozero_unittests",
     "src/tracing:tracing_unittests",
+    "tools/ftrace_proto_gen:ftrace_proto_gen_unittests",
   ]
   if (!build_with_chromium) {
     deps += [ "tools/sanitizers_unittests" ]
@@ -62,8 +68,23 @@ if (!build_with_chromium) {
     testonly = true
     deps = [
       "gn:default_deps",
+      "src/ftrace_reader:ftrace_reader_benchmarks",
       "src/tracing:tracing_benchmarks",
+      "test:benchmark_main",
     ]
+  }
+
+  executable("perfetto_integrationtests") {
+    testonly = true
+    deps = [
+      "gn:default_deps",
+      "gn:gtest_main",
+      "src/ftrace_reader:ftrace_reader_integrationtests",
+      "test:end_to_end_integrationtests",
+    ]
+    if (build_with_android) {
+      cflags = [ "-DPERFETTO_BUILD_WITH_ANDROID" ]
+    }
   }
 
   if (monolithic_binaries) {
@@ -75,19 +96,9 @@ if (!build_with_chromium) {
   target(libtraced_shared_target_type, "libtraced_shared") {
     deps = [
       "gn:default_deps",
-      "src/traced/perfetto_cmd",
       "src/traced/probes",
       "src/traced/service",
     ]
-    if (build_with_android) {
-      cflags = [ "-DPERFETTO_BUILD_WITH_ANDROID" ]
-      deps += [ "src/base:android_task_runner" ]
-      libs = [
-        "binder",
-        "services",
-        "utils",
-      ]
-    }
   }
 
   # The unprivileged trace daemon that listens for Producer and Consumer
@@ -119,12 +130,21 @@ if (!build_with_chromium) {
   # tracing, acting as a Consumer.
   executable("perfetto") {
     deps = [
-      ":libtraced_shared",
       "gn:default_deps",
+      "src/traced/perfetto_cmd",
     ]
     sources = [
       "src/traced/perfetto_cmd/main.cc",
     ]
+    if (build_with_android) {
+      cflags = [ "-DPERFETTO_BUILD_WITH_ANDROID" ]
+      deps += [ "src/base:android_task_runner" ]
+      libs = [
+        "binder",
+        "services",
+        "utils",
+      ]
+    }
   }
 } else {
   group("lib") {

@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-#include "src/tracing/ipc/posix_shared_memory.h"
-
 #include <inttypes.h>
 
 #include "gmock/gmock.h"
@@ -33,8 +31,8 @@
 #include "src/base/test/test_task_runner.h"
 #include "src/ipc/test/test_socket.h"
 
-#include "protos/test_event.pbzero.h"
-#include "protos/trace_packet.pbzero.h"
+#include "perfetto/trace/test_event.pbzero.h"
+#include "perfetto/trace/trace_packet.pbzero.h"
 
 namespace perfetto {
 namespace {
@@ -134,22 +132,24 @@ TEST_F(TracingIntegrationTest, WithIPCTransport) {
   auto* ds_config = trace_config.add_data_sources()->mutable_config();
   ds_config->set_name("perfetto.test");
   ds_config->set_target_buffer(0);
-  ds_config->set_trace_category_filters("foo,bar");
   consumer_endpoint->EnableTracing(trace_config);
 
   // At this point, the Producer should be asked to turn its data source on.
   DataSourceInstanceID ds_iid = 0;
+
+  BufferID global_buf_id = 0;
   auto on_create_ds_instance =
       task_runner_->CreateCheckpoint("on_create_ds_instance");
   EXPECT_CALL(producer, CreateDataSourceInstance(_, _))
       .WillOnce(
-          Invoke([on_create_ds_instance, &ds_iid](DataSourceInstanceID id,
-                                                  const DataSourceConfig& cfg) {
+          Invoke([on_create_ds_instance, &ds_iid, &global_buf_id](
+                     DataSourceInstanceID id, const DataSourceConfig& cfg) {
             ASSERT_NE(0u, id);
             ds_iid = id;
             ASSERT_EQ("perfetto.test", cfg.name());
-            ASSERT_EQ(0u, cfg.target_buffer());
-            ASSERT_EQ("foo,bar", cfg.trace_category_filters());
+            global_buf_id = static_cast<BufferID>(cfg.target_buffer());
+            ASSERT_NE(0u, global_buf_id);
+            ASSERT_LE(global_buf_id, std::numeric_limits<BufferID>::max());
             on_create_ds_instance();
           }));
   task_runner_->RunUntilCheckpoint("on_create_ds_instance");
@@ -158,7 +158,7 @@ TEST_F(TracingIntegrationTest, WithIPCTransport) {
   // Doing so should accumulate a bunch of chunks that will be notified by the
   // a future task in one batch.
   std::unique_ptr<TraceWriter> writer =
-      producer_endpoint->CreateTraceWriter(1 /* target_buffer */);
+      producer_endpoint->CreateTraceWriter(global_buf_id);
   ASSERT_TRUE(writer);
 
   const size_t kNumPackets = 10;
@@ -220,6 +220,11 @@ TEST_F(TracingIntegrationTest, WithIPCTransport) {
 // - unknown fields preserved end-to-end.
 // - >1 data source.
 // - >1 data consumer sharing the same data source, with different TraceBuffers.
+// - >1 consumer with > 1 buffer each.
+// - Consumer disconnecting in the middle of a ReadBuffers() call.
+// - Multiple calls to DisableTracing.
+// - Out of order Enable/Disable/FreeBuffers calls.
+// - DisableTracing does actually freeze the buffers.
 
 }  // namespace
 }  // namespace perfetto

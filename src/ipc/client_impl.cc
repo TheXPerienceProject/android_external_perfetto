@@ -18,6 +18,8 @@
 
 #include <inttypes.h>
 
+#include <utility>
+
 #include "perfetto/base/task_runner.h"
 #include "perfetto/base/utils.h"
 #include "perfetto/ipc/service_descriptor.h"
@@ -44,6 +46,8 @@ ClientImpl::ClientImpl(const char* socket_name, base::TaskRunner* task_runner)
 }
 
 ClientImpl::~ClientImpl() {
+  // Ensure we are not destroyed in the middle of invoking a reply.
+  PERFETTO_DCHECK(!invoking_method_reply_);
   OnDisconnect(nullptr);  // The UnixSocket* ptr is not used in OnDisconnect().
 }
 
@@ -77,6 +81,7 @@ RequestID ClientImpl::BeginInvoke(ServiceID service_id,
                                   const std::string& method_name,
                                   MethodID remote_method_id,
                                   const ProtoMessage& method_args,
+                                  bool drop_reply,
                                   base::WeakPtr<ServiceProxy> service_proxy) {
   std::string args_proto;
   RequestID request_id = ++last_request_id_;
@@ -85,17 +90,20 @@ RequestID ClientImpl::BeginInvoke(ServiceID service_id,
   Frame::InvokeMethod* req = frame.mutable_msg_invoke_method();
   req->set_service_id(service_id);
   req->set_method_id(remote_method_id);
+  req->set_drop_reply(drop_reply);
   bool did_serialize = method_args.SerializeToString(&args_proto);
   req->set_args_proto(args_proto);
   if (!did_serialize || !SendFrame(frame)) {
     PERFETTO_DLOG("BeginInvoke() failed while sending the frame");
     return 0;
   }
+  if (drop_reply)
+    return 0;
   QueuedRequest qr;
   qr.type = Frame::kMsgInvokeMethod;
   qr.request_id = request_id;
   qr.method_name = method_name;
-  qr.service_proxy = service_proxy;
+  qr.service_proxy = std::move(service_proxy);
   queued_requests_.emplace(request_id, std::move(qr));
   return request_id;
 }
@@ -152,7 +160,7 @@ void ClientImpl::OnDataAvailable(UnixSocket*) {
     if (!frame_deserializer_.EndReceive(rsize)) {
       // The endpoint tried to send a frame that is way too large.
       return sock_->Shutdown();  // In turn will trigger an OnDisconnect().
-      // TODO check this.
+      // TODO(fmayer): check this.
     }
   } while (rsize > 0);
 
@@ -232,7 +240,8 @@ void ClientImpl::OnInvokeMethodReply(QueuedRequest req,
     return;
   std::unique_ptr<ProtoMessage> decoded_reply;
   if (reply.success()) {
-    // TODO this could be optimized, stop doing method name string lookups.
+    // TODO(fmayer): this could be optimized, stop doing method name string
+    // lookups.
     for (const auto& method : service_proxy->GetDescriptor().methods) {
       if (req.method_name == method.name) {
         decoded_reply = method.reply_proto_decoder(reply.reply_proto());
@@ -241,8 +250,10 @@ void ClientImpl::OnInvokeMethodReply(QueuedRequest req,
     }
   }
   const RequestID request_id = req.request_id;
+  invoking_method_reply_ = true;
   service_proxy->EndInvoke(request_id, std::move(decoded_reply),
                            reply.has_more());
+  invoking_method_reply_ = false;
 
   // If this is a streaming method and future replies will be resolved, put back
   // the |req| with the callback into the set of active requests.

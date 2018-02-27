@@ -23,9 +23,9 @@
 
 #include "perfetto/base/logging.h"
 #include "perfetto/protozero/proto_utils.h"
-#include "src/tracing/core/shared_memory_arbiter.h"
+#include "src/tracing/core/shared_memory_arbiter_impl.h"
 
-#include "protos/trace_packet.pbzero.h"
+#include "perfetto/trace/trace_packet.pbzero.h"
 
 // TODO(primiano): right now this class is accumulating a patchlist but not
 // sending it to the service.
@@ -40,7 +40,7 @@ namespace {
 constexpr size_t kPacketHeaderSize = SharedMemoryABI::kPacketHeaderSize;
 }  // namespace
 
-TraceWriterImpl::TraceWriterImpl(SharedMemoryArbiter* shmem_arbiter,
+TraceWriterImpl::TraceWriterImpl(SharedMemoryArbiterImpl* shmem_arbiter,
                                  WriterID id,
                                  BufferID target_buffer)
     : shmem_arbiter_(shmem_arbiter),
@@ -67,8 +67,8 @@ TraceWriterImpl::TracePacketHandle TraceWriterImpl::NewTracePacket() {
 
   fragmenting_packet_ = false;
 
-  // TODO: hack to get a new page every time and reduce fragmentation (that
-  // requires stitching support in the service).
+  // TODO(fmayer): hack to get a new page every time and reduce fragmentation
+  // (that requires stitching support in the service).
   protobuf_stream_writer_.Reset(GetNewBuffer());
 
   // Reserve space for the size of the message. Note: this call might re-enter

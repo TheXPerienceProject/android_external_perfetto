@@ -24,11 +24,11 @@
 #include "perfetto/tracing/core/data_source_config.h"
 #include "perfetto/tracing/core/data_source_descriptor.h"
 #include "perfetto/tracing/core/producer.h"
+#include "perfetto/tracing/core/shared_memory_arbiter.h"
 #include "perfetto/tracing/core/trace_writer.h"
-#include "src/tracing/core/shared_memory_arbiter.h"
 #include "src/tracing/ipc/posix_shared_memory.h"
 
-// TODO think to what happens when ProducerIPCClientImpl gets destroyed
+// TODO(fmayer): think to what happens when ProducerIPCClientImpl gets destroyed
 // w.r.t. the Producer pointer. Also think to lifetime of the Producer* during
 // the callbacks.
 
@@ -104,16 +104,14 @@ void ProducerIPCClientImpl::OnConnectionInitialized(bool connection_succeeded) {
   auto on_pages_complete = [this](const std::vector<uint32_t>& changed_pages) {
     OnPagesComplete(changed_pages);
   };
-  shared_memory_arbiter_.reset(
-      new SharedMemoryArbiter(shared_memory_->start(), shared_memory_->size(),
-                              4096 /* TODO where does this come from? */,
-                              on_pages_complete, task_runner_));
+  shared_memory_arbiter_ = SharedMemoryArbiter::CreateInstance(
+      shared_memory_.get(), kBufferPageSize, on_pages_complete, task_runner_);
 
   producer_->OnConnect();
 }
 
-// Called by SharedMemoryArbiter when some chunks are complete and we need to
-// notify the service about that.
+// Called by SharedMemoryArbiterImpl when some chunks are complete and we need
+// to notify the service about that.
 void ProducerIPCClientImpl::OnPagesComplete(
     const std::vector<uint32_t>& changed_pages) {
   PERFETTO_DCHECK_THREAD(thread_checker_);
@@ -164,10 +162,10 @@ void ProducerIPCClientImpl::RegisterDataSource(
   RegisterDataSourceRequest req;
   descriptor.ToProto(req.mutable_data_source_descriptor());
   ipc::Deferred<RegisterDataSourceResponse> async_response;
-  // TODO: add a test that destroys the IPC channel soon after this call and
-  // checks that the callback(0) is invoked.
-  // TODO: add a test that destroyes ProducerIPCClientImpl soon after this call
-  // and checks that the callback is dropped.
+  // TODO(fmayer): add a test that destroys the IPC channel soon after this call
+  // and checks that the callback(0) is invoked.
+  // TODO(fmayer): add a test that destroyes ProducerIPCClientImpl soon after
+  // this call and checks that the callback is dropped.
   async_response.Bind(
       [callback](ipc::AsyncResult<RegisterDataSourceResponse> response) {
         if (!response) {

@@ -26,7 +26,7 @@
 #include "perfetto/tracing/core/producer.h"
 #include "perfetto/tracing/core/service.h"
 
-#include "protos/tracing_service/producer_port.ipc.h"
+#include "perfetto/ipc/producer_port.ipc.h"
 
 namespace perfetto {
 
@@ -98,7 +98,7 @@ class ProducerIPCService : public ProducerPort /* from producer_port.proto */ {
 
   // Called back by the |core_service_| business logic, soon after a call to
   // RegisterDataSource().
-  void OnDataSourceRegistered(ipc::ClientID, std::string, DataSourceID);
+  void OnDataSourceRegistered(ipc::ClientID, const std::string&, DataSourceID);
 
   Service* const core_service_;
 
