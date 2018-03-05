@@ -56,7 +56,10 @@ TraceWriterImpl::TraceWriterImpl(SharedMemoryArbiterImpl* shmem_arbiter,
 }
 
 TraceWriterImpl::~TraceWriterImpl() {
-  // TODO(primiano): this should also return the current chunk. Add tests.
+  if (cur_chunk_.is_valid()) {
+    cur_packet_->Finalize();
+    shmem_arbiter_->ReturnCompletedChunk(std::move(cur_chunk_));
+  }
   shmem_arbiter_->ReleaseWriterID(id_);
 }
 
@@ -115,8 +118,20 @@ protozero::ContiguousMemoryRange TraceWriterImpl::GetNewBuffer() {
     for (auto* nested_msg = cur_packet_->nested_message(); nested_msg;
          nested_msg = nested_msg->nested_message()) {
       uint8_t* const cur_hdr = nested_msg->size_field();
-      PERFETTO_DCHECK(cur_hdr >= cur_chunk_.payload_begin() &&
-                      cur_hdr + kMessageLengthFieldSize <= cur_chunk_.end());
+#if PERFETTO_DCHECK_IS_ON()
+      // Ensure that the size field of the nested message either points to
+      // somewhere in the current chunk or a size field of a patch in the
+      // patch list.
+      bool size_in_current_chunk =
+          cur_hdr >= cur_chunk_.payload_begin() &&
+          cur_hdr + kMessageLengthFieldSize <= cur_chunk_.end();
+      if (!size_in_current_chunk) {
+        auto patch_it = std::find_if(
+            patch_list_.begin(), patch_list_.end(),
+            [cur_hdr](const Patch& p) { return p.size_field == cur_hdr; });
+        PERFETTO_DCHECK(patch_it != patch_list_.end());
+      }
+#endif
       auto cur_hdr_offset = static_cast<uint16_t>(cur_hdr - cur_chunk_.begin());
       patch_list_.emplace_front(cur_chunk_id_, cur_hdr_offset);
       Patch& patch = patch_list_.front();

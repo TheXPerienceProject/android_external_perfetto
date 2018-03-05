@@ -108,6 +108,16 @@ void DataSourceConfig::FtraceConfig::FromProto(
     atrace_apps_.back() =
         static_cast<decltype(atrace_apps_)::value_type>(field);
   }
+
+  static_assert(sizeof(buffer_size_kb_) == sizeof(proto.buffer_size_kb()),
+                "size mismatch");
+  buffer_size_kb_ =
+      static_cast<decltype(buffer_size_kb_)>(proto.buffer_size_kb());
+
+  static_assert(sizeof(drain_period_ms_) == sizeof(proto.drain_period_ms()),
+                "size mismatch");
+  drain_period_ms_ =
+      static_cast<decltype(drain_period_ms_)>(proto.drain_period_ms());
   unknown_fields_ = proto.unknown_fields();
 }
 
@@ -133,6 +143,16 @@ void DataSourceConfig::FtraceConfig::ToProto(
     static_assert(sizeof(it) == sizeof(proto->atrace_apps(0)), "size mismatch");
     *entry = static_cast<decltype(proto->atrace_apps(0))>(it);
   }
+
+  static_assert(sizeof(buffer_size_kb_) == sizeof(proto->buffer_size_kb()),
+                "size mismatch");
+  proto->set_buffer_size_kb(
+      static_cast<decltype(proto->buffer_size_kb())>(buffer_size_kb_));
+
+  static_assert(sizeof(drain_period_ms_) == sizeof(proto->drain_period_ms()),
+                "size mismatch");
+  proto->set_drain_period_ms(
+      static_cast<decltype(proto->drain_period_ms())>(drain_period_ms_));
   *(proto->mutable_unknown_fields()) = unknown_fields_;
 }
 

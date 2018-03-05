@@ -20,6 +20,7 @@ namespace perfetto {
 
 // TODO(hjd): Auto-generate this file.
 // TODO(b/70373826): Reduce runtime overhead with constexpr magic etc.
+// TODO(azappone): Autogenerate event_info for these new events
 std::vector<Event> GetStaticEventInfo() {
   std::vector<Event> events;
 
@@ -45,6 +46,19 @@ std::vector<Event> GetStaticEventInfo() {
     event->fields.push_back(FieldFromNameIdType("next_comm", 5, kProtoString));
     event->fields.push_back(FieldFromNameIdType("next_pid", 6, kProtoInt32));
     event->fields.push_back(FieldFromNameIdType("next_prio", 7, kProtoInt32));
+  }
+
+  {
+    events.emplace_back(Event{});
+    Event* event = &events.back();
+    event->name = "sched_wakeup";
+    event->group = "sched";
+    event->proto_field_id = 17;
+    event->fields.push_back(FieldFromNameIdType("comm", 1, kProtoString));
+    event->fields.push_back(FieldFromNameIdType("pid", 2, kProtoInt32));
+    event->fields.push_back(FieldFromNameIdType("prio", 3, kProtoInt32));
+    event->fields.push_back(FieldFromNameIdType("success", 4, kProtoInt32));
+    event->fields.push_back(FieldFromNameIdType("target_cpu", 5, kProtoInt32));
   }
 
   {
