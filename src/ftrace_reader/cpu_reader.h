@@ -22,11 +22,14 @@
 
 #include <array>
 #include <memory>
+#include <set>
+#include <thread>
 
 #include "gtest/gtest_prod.h"
 #include "perfetto/base/scoped_file.h"
+#include "perfetto/base/thread_checker.h"
 #include "perfetto/ftrace_reader/ftrace_controller.h"
-#include "perfetto/protozero/protozero_message.h"
+#include "perfetto/protozero/message.h"
 #include "proto_translation_table.h"
 
 namespace perfetto {
@@ -64,17 +67,23 @@ class EventFilter {
   std::set<std::string> enabled_names_;
 };
 
+// Processes raw ftrace data for a logical CPU core.
 class CpuReader {
  public:
-  CpuReader(const ProtoTranslationTable*, size_t cpu, base::ScopedFile fd);
+  // |on_data_available| will be called on an arbitrary thread when at least one
+  // page of ftrace data is available for draining on this CPU.
+  CpuReader(const ProtoTranslationTable*,
+            size_t cpu,
+            base::ScopedFile fd,
+            std::function<void()> on_data_available);
   ~CpuReader();
 
-  bool Drain(
-      const std::array<const EventFilter*, kMaxSinks>&,
-      const std::array<
-          protozero::ProtoZeroMessageHandle<protos::pbzero::FtraceEventBundle>,
-          kMaxSinks>&);
-  int GetFileDescriptor();
+  // Drains all available data from the staging pipe into the given sinks.
+  // Should be called in response to the |on_data_available| callback.
+  bool Drain(const std::array<const EventFilter*, kMaxSinks>&,
+             const std::array<
+                 protozero::MessageHandle<protos::pbzero::FtraceEventBundle>,
+                 kMaxSinks>&);
 
   template <typename T>
   static bool ReadAndAdvance(const uint8_t** ptr, const uint8_t* end, T* out) {
@@ -91,11 +100,19 @@ class CpuReader {
   template <typename T>
   static void ReadIntoVarInt(const uint8_t* start,
                              size_t field_id,
-                             protozero::ProtoZeroMessage* out) {
+                             protozero::Message* out) {
     T t;
     memcpy(&t, reinterpret_cast<const void*>(start), sizeof(T));
     out->AppendVarInt<T>(field_id, t);
   }
+
+  // Iterate through every file in the current directory and check if the inode
+  // number of each file matches any of the inode numbers saved in events.
+  // Returns map of inode number to filename for every inode number that is
+  // found in the filesystem. If the inode number saved from events is not
+  // found, nothing is added to the map.
+  static std::map<uint64_t, std::string> GetFilenamesForInodeNumbers(
+      const std::set<uint64_t>& inode_numbers);
 
   // Parse a raw ftrace page beginning at ptr and write the events a protos
   // into the provided bundle respecting the given event filter.
@@ -120,22 +137,33 @@ class CpuReader {
                          const uint8_t* start,
                          const uint8_t* end,
                          const ProtoTranslationTable* table,
-                         protozero::ProtoZeroMessage* message);
+                         protozero::Message* message,
+                         std::set<uint64_t>* inode_numbers);
 
   static bool ParseField(const Field& field,
                          const uint8_t* start,
                          const uint8_t* end,
-                         protozero::ProtoZeroMessage* message);
+                         protozero::Message* message,
+                         std::set<uint64_t>* inode_numbers);
 
  private:
+  static void RunWorkerThread(size_t cpu,
+                              int trace_fd,
+                              int staging_write_fd,
+                              std::function<void()> on_data_available);
+
   uint8_t* GetBuffer();
   CpuReader(const CpuReader&) = delete;
   CpuReader& operator=(const CpuReader&) = delete;
 
   const ProtoTranslationTable* table_;
   const size_t cpu_;
-  base::ScopedFile fd_;
+  base::ScopedFile trace_fd_;
+  base::ScopedFile staging_read_fd_;
+  base::ScopedFile staging_write_fd_;
   std::unique_ptr<uint8_t[]> buffer_;
+  std::thread worker_thread_;
+  PERFETTO_THREAD_CHECKER(thread_checker_)
 };
 
 }  // namespace perfetto

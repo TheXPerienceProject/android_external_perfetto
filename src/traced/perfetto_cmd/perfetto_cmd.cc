@@ -39,17 +39,20 @@
 #include "perfetto/tracing/ipc/consumer_ipc_client.h"
 
 #include "perfetto/config/trace_config.pb.h"
+#include "perfetto/trace/trace.pb.h"
+
+#if defined(PERFETTO_OS_ANDROID)
+#include "perfetto/base/android_task_runner.h"
+#endif  // defined(PERFETTO_OS_ANDROID)
 
 #if defined(PERFETTO_BUILD_WITH_ANDROID)
-#include "perfetto/base/android_task_runner.h"
-
 #include <android/os/DropBoxManager.h>
 #include <utils/Looper.h>
 #include <utils/StrongPointer.h>
 #endif  // defined(PERFETTO_BUILD_WITH_ANDROID)
 
 // TODO(primiano): add the ability to pass the file descriptor directly to the
-// traced service instead of receiving a copy of the chunks and writing them
+// traced service instead of receiving a copy of the slices and writing them
 // from this process.
 namespace perfetto {
 namespace {
@@ -71,7 +74,7 @@ std::string GetDirName(const std::string& path) {
 using protozero::proto_utils::WriteVarInt;
 using protozero::proto_utils::MakeTagLengthDelimited;
 
-#if defined(PERFETTO_BUILD_WITH_ANDROID)
+#if defined(PERFETTO_OS_ANDROID)
 using PlatformTaskRunner = base::AndroidTaskRunner;
 #else
 using PlatformTaskRunner = base::UnixTaskRunner;
@@ -149,9 +152,9 @@ int PerfettoCmd::Main(int argc, char** argv) {
         test_config.set_duration_ms(10000);
         auto* ds_config = test_config.add_data_sources()->mutable_config();
         ds_config->set_name("com.google.perfetto.ftrace");
-        ds_config->mutable_ftrace_config()->add_event_names("sched_switch");
-        ds_config->mutable_ftrace_config()->add_event_names("cpu_idle");
-        ds_config->mutable_ftrace_config()->add_event_names("cpu_frequency");
+        ds_config->mutable_ftrace_config()->add_ftrace_events("sched_switch");
+        ds_config->mutable_ftrace_config()->add_ftrace_events("cpu_idle");
+        ds_config->mutable_ftrace_config()->add_ftrace_events("cpu_frequency");
         ds_config->set_target_buffer(0);
         test_config.SerializeToString(&trace_config_raw);
       } else {
@@ -196,9 +199,13 @@ int PerfettoCmd::Main(int argc, char** argv) {
     return 1;
   }
 
-  if (trace_config_raw.empty() ||
-      (trace_out_path_.empty() && dropbox_tag_.empty())) {
+  if (trace_out_path_.empty() && dropbox_tag_.empty()) {
     return PrintUsage(argv[0]);
+  }
+
+  if (trace_config_raw.empty()) {
+    PERFETTO_ELOG("The TraceConfig is empty");
+    return 1;
   }
 
   perfetto::protos::TraceConfig trace_config_proto;
@@ -231,6 +238,7 @@ void PerfettoCmd::OnConnect() {
       "Connected to the Perfetto traced service, starting tracing for %d ms",
       trace_config_->duration_ms());
   PERFETTO_DCHECK(trace_config_);
+  trace_config_->set_enable_extra_guardrails(!dropbox_tag_.empty());
   consumer_endpoint_->EnableTracing(*trace_config_);
   task_runner_.PostDelayedTask(std::bind(&PerfettoCmd::OnStopTraceTimer, this),
                                trace_config_->duration_ms());
@@ -259,14 +267,15 @@ void PerfettoCmd::OnTimeout() {
 void PerfettoCmd::OnTraceData(std::vector<TracePacket> packets, bool has_more) {
   PERFETTO_DLOG("Received trace packet, has_more=%d", has_more);
   for (TracePacket& packet : packets) {
-    for (const Chunk& chunk : packet) {
+    for (const Slice& slice : packet) {
       uint8_t preamble[16];
       uint8_t* pos = preamble;
-      pos = WriteVarInt(MakeTagLengthDelimited(1 /* field_id */), pos);
-      pos = WriteVarInt(static_cast<uint32_t>(chunk.size), pos);
+      pos = WriteVarInt(
+          MakeTagLengthDelimited(protos::Trace::kPacketFieldNumber), pos);
+      pos = WriteVarInt(static_cast<uint32_t>(slice.size), pos);
       fwrite(reinterpret_cast<const char*>(preamble), pos - preamble, 1,
              trace_out_stream_.get());
-      fwrite(reinterpret_cast<const char*>(chunk.start), chunk.size, 1,
+      fwrite(reinterpret_cast<const char*>(slice.start), slice.size, 1,
              trace_out_stream_.get());
     }
   }
@@ -274,7 +283,6 @@ void PerfettoCmd::OnTraceData(std::vector<TracePacket> packets, bool has_more) {
     return;
 
   // Reached end of trace.
-  consumer_endpoint_->FreeBuffers();
   task_runner_.Quit();
 
   fflush(*trace_out_stream_);

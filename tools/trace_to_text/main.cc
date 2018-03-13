@@ -74,100 +74,120 @@ using google::protobuf::compiler::DiskSourceTree;
 using google::protobuf::compiler::Importer;
 using google::protobuf::compiler::MultiFileErrorCollector;
 using google::protobuf::io::OstreamOutputStream;
-using protos::FtraceEvent;
-using protos::FtraceEventBundle;
-using protos::PrintFtraceEvent;
-using protos::SchedSwitchFtraceEvent;
-using protos::SchedWakeupFtraceEvent;
+using protos::BinderLockedFtraceEvent;
+using protos::BinderLockFtraceEvent;
+using protos::BinderSetPriorityFtraceEvent;
+using protos::BinderTransactionFtraceEvent;
+using protos::BinderTransactionReceivedFtraceEvent;
+using protos::BinderUnlockFtraceEvent;
+using protos::BlockRqIssueFtraceEvent;
+using protos::CgroupAttachTaskFtraceEvent;
+using protos::CgroupDestroyRootFtraceEvent;
+using protos::CgroupMkdirFtraceEvent;
+using protos::CgroupReleaseFtraceEvent;
+using protos::CgroupRemountFtraceEvent;
+using protos::CgroupRenameFtraceEvent;
+using protos::CgroupRmdirFtraceEvent;
+using protos::CgroupSetupRootFtraceEvent;
+using protos::CgroupTransferTasksFtraceEvent;
+using protos::ClockDisableFtraceEvent;
+using protos::ClockEnableFtraceEvent;
+using protos::ClockSetRateFtraceEvent;
 using protos::CpuFrequencyFtraceEvent;
 using protos::CpuFrequencyLimitsFtraceEvent;
 using protos::CpuIdleFtraceEvent;
-using protos::ClockEnableFtraceEvent;
-using protos::ClockDisableFtraceEvent;
-using protos::ClockSetRateFtraceEvent;
-using protos::SchedCpuHotplugFtraceEvent;
-using protos::SchedWakingFtraceEvent;
-using protos::IpiEntryFtraceEvent;
-using protos::IpiExitFtraceEvent;
-using protos::IpiRaiseFtraceEvent;
-using protos::I2cReadFtraceEvent;
-using protos::I2cWriteFtraceEvent;
-using protos::I2cResultFtraceEvent;
-using protos::I2cReplyFtraceEvent;
-using protos::SmbusReadFtraceEvent;
-using protos::SmbusWriteFtraceEvent;
-using protos::SmbusResultFtraceEvent;
-using protos::SmbusReplyFtraceEvent;
-using protos::IrqHandlerEntryFtraceEvent;
-using protos::IrqHandlerExitFtraceEvent;
-using protos::SyncPtFtraceEvent;
-using protos::SyncTimelineFtraceEvent;
-using protos::SyncWaitFtraceEvent;
 using protos::Ext4DaWriteBeginFtraceEvent;
 using protos::Ext4DaWriteEndFtraceEvent;
 using protos::Ext4SyncFileEnterFtraceEvent;
 using protos::Ext4SyncFileExitFtraceEvent;
-using protos::BlockRqIssueFtraceEvent;
-using protos::MmVmscanKswapdWakeFtraceEvent;
-using protos::MmVmscanKswapdSleepFtraceEvent;
-using protos::BinderTransactionFtraceEvent;
-using protos::BinderTransactionReceivedFtraceEvent;
-using protos::BinderSetPriorityFtraceEvent;
-using protos::BinderLockFtraceEvent;
-using protos::BinderLockedFtraceEvent;
-using protos::BinderUnlockFtraceEvent;
-using protos::RegulatorDisableFtraceEvent;
-using protos::RegulatorDisableCompleteFtraceEvent;
-using protos::RegulatorEnableFtraceEvent;
-using protos::RegulatorEnableCompleteFtraceEvent;
-using protos::RegulatorEnableDelayFtraceEvent;
-using protos::RegulatorSetVoltageFtraceEvent;
-using protos::RegulatorSetVoltageCompleteFtraceEvent;
-using protos::CgroupAttachTaskFtraceEvent;
-using protos::CgroupMkdirFtraceEvent;
-using protos::CgroupRemountFtraceEvent;
-using protos::CgroupRmdirFtraceEvent;
-using protos::CgroupTransferTasksFtraceEvent;
-using protos::CgroupDestroyRootFtraceEvent;
-using protos::CgroupReleaseFtraceEvent;
-using protos::CgroupRenameFtraceEvent;
-using protos::CgroupSetupRootFtraceEvent;
+using protos::FtraceEvent;
+using protos::FtraceEventBundle;
+using protos::I2cReadFtraceEvent;
+using protos::I2cReplyFtraceEvent;
+using protos::I2cResultFtraceEvent;
+using protos::I2cWriteFtraceEvent;
+using protos::IpiEntryFtraceEvent;
+using protos::IpiExitFtraceEvent;
+using protos::IpiRaiseFtraceEvent;
+using protos::IrqHandlerEntryFtraceEvent;
+using protos::IrqHandlerExitFtraceEvent;
+using protos::LowmemoryKillFtraceEvent;
 using protos::MdpCmdKickoffFtraceEvent;
-using protos::MdpCommitFtraceEvent;
-using protos::MdpPerfSetOtFtraceEvent;
-using protos::MdpSsppChangeFtraceEvent;
-using protos::TracingMarkWriteFtraceEvent;
 using protos::MdpCmdPingpongDoneFtraceEvent;
-using protos::MdpCompareBwFtraceEvent;
-using protos::MdpPerfSetPanicLutsFtraceEvent;
-using protos::MdpSsppSetFtraceEvent;
 using protos::MdpCmdReadptrDoneFtraceEvent;
-using protos::MdpMisrCrcFtraceEvent;
-using protos::MdpPerfSetQosLutsFtraceEvent;
-using protos::MdpTraceCounterFtraceEvent;
 using protos::MdpCmdReleaseBwFtraceEvent;
-using protos::MdpMixerUpdateFtraceEvent;
-using protos::MdpPerfSetWmLevelsFtraceEvent;
-using protos::MdpVideoUnderrunDoneFtraceEvent;
 using protos::MdpCmdWaitPingpongFtraceEvent;
+using protos::MdpCommitFtraceEvent;
+using protos::MdpCompareBwFtraceEvent;
+using protos::MdpMisrCrcFtraceEvent;
+using protos::MdpMixerUpdateFtraceEvent;
 using protos::MdpPerfPrefillCalcFtraceEvent;
+using protos::MdpPerfSetOtFtraceEvent;
+using protos::MdpPerfSetPanicLutsFtraceEvent;
+using protos::MdpPerfSetQosLutsFtraceEvent;
+using protos::MdpPerfSetWmLevelsFtraceEvent;
 using protos::MdpPerfUpdateBusFtraceEvent;
-using protos::RotatorBwAoAsContextFtraceEvent;
+using protos::MdpSsppChangeFtraceEvent;
+using protos::MdpSsppSetFtraceEvent;
+using protos::MdpTraceCounterFtraceEvent;
+using protos::MdpVideoUnderrunDoneFtraceEvent;
+using protos::MmCompactionBeginFtraceEvent;
+using protos::MmCompactionDeferCompactionFtraceEvent;
+using protos::MmCompactionDeferredFtraceEvent;
+using protos::MmCompactionDeferResetFtraceEvent;
+using protos::MmCompactionEndFtraceEvent;
+using protos::MmCompactionFinishedFtraceEvent;
+using protos::MmCompactionIsolateFreepagesFtraceEvent;
+using protos::MmCompactionIsolateMigratepagesFtraceEvent;
+using protos::MmCompactionKcompactdSleepFtraceEvent;
+using protos::MmCompactionKcompactdWakeFtraceEvent;
+using protos::MmCompactionMigratepagesFtraceEvent;
+using protos::MmCompactionSuitableFtraceEvent;
+using protos::MmCompactionTryToCompactPagesFtraceEvent;
+using protos::MmCompactionWakeupKcompactdFtraceEvent;
 using protos::MmFilemapAddToPageCacheFtraceEvent;
 using protos::MmFilemapDeleteFromPageCacheFtraceEvent;
+using protos::MmVmscanDirectReclaimBeginFtraceEvent;
+using protos::MmVmscanDirectReclaimEndFtraceEvent;
+using protos::MmVmscanKswapdSleepFtraceEvent;
+using protos::MmVmscanKswapdWakeFtraceEvent;
+using protos::PrintFtraceEvent;
+using protos::ProcessTree;
+using protos::RegulatorDisableCompleteFtraceEvent;
+using protos::RegulatorDisableFtraceEvent;
+using protos::RegulatorEnableCompleteFtraceEvent;
+using protos::RegulatorEnableDelayFtraceEvent;
+using protos::RegulatorEnableFtraceEvent;
+using protos::RegulatorSetVoltageCompleteFtraceEvent;
+using protos::RegulatorSetVoltageFtraceEvent;
+using protos::RotatorBwAoAsContextFtraceEvent;
 using protos::SchedBlockedReasonFtraceEvent;
-using protos::LowmemoryKillFtraceEvent;
+using protos::SchedCpuHotplugFtraceEvent;
+using protos::SchedSwitchFtraceEvent;
+using protos::SchedWakeupFtraceEvent;
+using protos::SchedWakeupNewFtraceEvent;
+using protos::SchedWakingFtraceEvent;
+using protos::SmbusReadFtraceEvent;
+using protos::SmbusReplyFtraceEvent;
+using protos::SmbusResultFtraceEvent;
+using protos::SmbusWriteFtraceEvent;
 using protos::SoftirqEntryFtraceEvent;
 using protos::SoftirqExitFtraceEvent;
 using protos::SoftirqRaiseFtraceEvent;
-using protos::MmVmscanDirectReclaimBeginFtraceEvent;
-using protos::MmVmscanDirectReclaimEndFtraceEvent;
-using protos::WorkqueueExecuteEndFtraceEvent;
-using protos::WorkqueueExecuteStartFtraceEvent;
-using protos::WorkqueueActivateWorkFtraceEvent;
-using protos::WorkqueueQueueWorkFtraceEvent;
+using protos::SuspendResumeFtraceEvent;
+using protos::SyncPtFtraceEvent;
+using protos::SyncTimelineFtraceEvent;
+using protos::SyncWaitFtraceEvent;
 using protos::Trace;
 using protos::TracePacket;
+using protos::TracingMarkWriteFtraceEvent;
+using protos::WorkqueueActivateWorkFtraceEvent;
+using protos::WorkqueueExecuteEndFtraceEvent;
+using protos::WorkqueueExecuteStartFtraceEvent;
+using protos::WorkqueueQueueWorkFtraceEvent;
+using Process = protos::ProcessTree::Process;
+
+// TODO(hjd): Add tests.
 
 class MFE : public MultiFileErrorCollector {
   virtual void AddError(const std::string& filename,
@@ -207,6 +227,16 @@ const char* GetFlag(int32_t state) {
     return "W";
   return "R";
 }
+
+const char* MmCompactionRetArray[] = {
+    "deferred", "skipped",          "continue",          "partial",
+    "complete", "no_suitable_page", "not_suitable_zone", "contended"};
+
+const char* MmCompactionSuitableArray[] = {"DMA", "Normal", "Movable"};
+
+const char* SoftirqArray[] = {"HI",      "TIMER",        "NET_TX",  "NET_RX",
+                              "BLOCK",   "BLOCK_IOPOLL", "TASKLET", "SCHED",
+                              "HRTIMER", "RCU"};
 
 uint64_t TimestampToSeconds(uint64_t timestamp) {
   return timestamp / 1000000000ul;
@@ -559,43 +589,39 @@ int TraceToText(std::istream* input, std::ostream* output) {
 std::string FormatSoftirqRaise(const SoftirqRaiseFtraceEvent& event) {
   char line[2048];
   sprintf(line, "softirq_raise: vec=%u [action=%s]\\n", event.vec(),
-          "({ 0, 'HI' }, {1, 'TIMER' }, { 2, 'NET_TX' }, { 3, 'NET_RX' }, { 4, "
-          "'BLOCK' }, { 5, 'BLOCK_IOPOLL' }, { 6, 'TASKLET' }, { 7, 'SCHED' }, "
-          "{ 8, 'HRTIMER' }, { 9, 'RCU' })");
+          SoftirqArray[event.vec()]);
   return std::string(line);
 }
 
 std::string FormatSoftirqEntry(const SoftirqEntryFtraceEvent& event) {
   char line[2048];
   sprintf(line, "softirq_entry: vec=%u [action=%s]\\n", event.vec(),
-          "({ 0, 'HI' }, {1, 'TIMER' }, { 2, 'NET_TX' }, { 3, 'NET_RX' }, { 4, "
-          "'BLOCK' }, { 5, 'BLOCK_IOPOLL' }, { 6, 'TASKLET' }, { 7, 'SCHED' }, "
-          "{ 8, 'HRTIMER' }, { 9, 'RCU' })");
+          SoftirqArray[event.vec()]);
   return std::string(line);
 }
 
 std::string FormatSoftirqExit(const SoftirqExitFtraceEvent& event) {
   char line[2048];
   sprintf(line, "softirq_exit: vec=%u [action=%s]\\n", event.vec(),
-          "({ 0, 'HI' }, {1, 'TIMER' }, { 2, 'NET_TX' }, { 3, 'NET_RX' }, { 4, "
-          "'BLOCK' }, { 5, 'BLOCK_IOPOLL' }, { 6, 'TASKLET' }, { 7, 'SCHED' }, "
-          "{ 8, 'HRTIMER' }, { 9, 'RCU' })");
+          SoftirqArray[event.vec()]);
   return std::string(line);
 }
 
 std::string FormatI2cWrite(const I2cWriteFtraceEvent& event) {
   char line[2048];
-  sprintf(line, "i2c_write: i2c-%d #%u a=%03x f=%04x l=%u [%*xhD]\\n",
+  // TODO(hjd): Check event.buf().
+  sprintf(line, "i2c_write: i2c-%d #%u a=%03x f=%04x l=%u\\n",
           event.adapter_nr(), event.msg_nr(), event.addr(), event.flags(),
-          event.len(), event.len(), event.buf());
+          event.len());
   return std::string(line);
 }
 
 std::string FormatI2cReply(const I2cReplyFtraceEvent& event) {
   char line[2048];
-  sprintf(line, "i2c_reply: i2c-%d #%u a=%03x f=%04x l=%u [%*xhD]\\n",
+  // TODO(hjd): Check event.buf().
+  sprintf(line, "i2c_reply: i2c-%d #%u a=%03x f=%04x l=%u\\n",
           event.adapter_nr(), event.msg_nr(), event.addr(), event.flags(),
-          event.len(), event.len(), event.buf());
+          event.len());
   return std::string(line);
 }
 
@@ -660,6 +686,183 @@ std::string FormatWorkqueueActivateWork(
   return std::string(line);
 }
 
+std::string FormatMmCompactionBegin(const MmCompactionBeginFtraceEvent& event) {
+  char line[2048];
+  sprintf(line,
+          "mm_compaction_begin: zone_start=0x%llx migrate_pfn=0x%llx "
+          "free_pfn=0x%llx zone_end=0x%llx, mode=%s\\n",
+          event.zone_start(), event.migrate_pfn(), event.free_pfn(),
+          event.zone_end(), event.sync() ? "sync" : "async");
+  return std::string(line);
+}
+
+std::string FormatMmCompactionDeferCompaction(
+    const MmCompactionDeferCompactionFtraceEvent& event) {
+  char line[2048];
+  sprintf(line,
+          "mm_compaction_defer_compaction: node=%d zone=%-8s order=%d "
+          "order_failed=%d consider=%u limit=%lu\\n",
+          event.nid(), MmCompactionSuitableArray[event.idx()], event.order(),
+          event.order_failed(), event.considered(), 1UL << event.defer_shift());
+  return std::string(line);
+}
+
+std::string FormatMmCompactionDeferred(
+    const MmCompactionDeferredFtraceEvent& event) {
+  char line[2048];
+  sprintf(line,
+          "mm_compaction_deferred: node=%d zone=%-8s order=%d order_failed=%d "
+          "consider=%u limit=%lu\\n",
+          event.nid(), MmCompactionSuitableArray[event.idx()], event.order(),
+          event.order_failed(), event.considered(), 1UL << event.defer_shift());
+  return std::string(line);
+}
+
+std::string FormatMmCompactionDeferReset(
+    const MmCompactionDeferResetFtraceEvent& event) {
+  char line[2048];
+  sprintf(line,
+          "mm_compaction_defer_reset: node=%d zone=%-8s order=%d "
+          "order_failed=%d consider=%u limit=%lu\\n",
+          event.nid(), MmCompactionSuitableArray[event.idx()], event.order(),
+          event.order_failed(), event.considered(), 1UL << event.defer_shift());
+  return std::string(line);
+}
+
+std::string FormatMmCompactionEnd(const MmCompactionEndFtraceEvent& event) {
+  char line[2048];
+  sprintf(line,
+          "mm_compaction_end: zone_start=0x%llx migrate_pfn=0x%llx "
+          "free_pfn=0x%llx zone_end=0x%llx, mode=%s status=%s\\n",
+          event.zone_start(), event.migrate_pfn(), event.free_pfn(),
+          event.zone_end(), event.sync() ? "sync" : "aysnc",
+          MmCompactionRetArray[event.status()]);
+  return std::string(line);
+}
+
+std::string FormatMmCompactionFinished(
+    const MmCompactionFinishedFtraceEvent& event) {
+  char line[2048];
+  sprintf(line, "mm_compaction_finished: node=%d zone=%-8s order=%d ret=%s\\n",
+          event.nid(), MmCompactionSuitableArray[event.idx()], event.order(),
+          MmCompactionRetArray[event.ret()]);
+  return std::string(line);
+}
+
+std::string FormatMmCompactionIsolateFreepages(
+    const MmCompactionIsolateFreepagesFtraceEvent& event) {
+  char line[2048];
+  sprintf(line,
+          "mm_compaction_isolate_freepages: range=(0x%llx ~ 0x%llx) "
+          "nr_scanned=%llu nr_taken=%llu\\n",
+          event.start_pfn(), event.end_pfn(), event.nr_scanned(),
+          event.nr_taken());
+  return std::string(line);
+}
+
+std::string FormatMmCompactionIsolateMigratepages(
+    const MmCompactionIsolateMigratepagesFtraceEvent& event) {
+  char line[2048];
+  sprintf(line,
+          "mm_compaction_isolate_migratepages: range=(0x%llx ~ 0x%llx) "
+          "nr_scanned=%llu nr_taken=%llu\\n",
+          event.start_pfn(), event.end_pfn(), event.nr_scanned(),
+          event.nr_taken());
+  return std::string(line);
+}
+
+std::string FormatMmCompactionKcompactdSleep(
+    const MmCompactionKcompactdSleepFtraceEvent& event) {
+  char line[2048];
+  sprintf(line, "mm_compaction_kcompactd_sleep: nid=%d\\n", event.nid());
+  return std::string(line);
+}
+
+std::string FormatMmCompactionKcompactdWake(
+    const MmCompactionKcompactdWakeFtraceEvent& event) {
+  char line[2048];
+  sprintf(line,
+          "mm_compaction_kcompactd_wake: nid=%d order=%d classzone_idx=%-8s\\n",
+          event.nid(), event.order(),
+          MmCompactionSuitableArray[event.classzone_idx()]);
+  return std::string(line);
+}
+
+std::string FormatMmCompactionMigratepages(
+    const MmCompactionMigratepagesFtraceEvent& event) {
+  char line[2048];
+  sprintf(line,
+          "mm_compaction_migratepages: nr_migrated=%llu nr_failed=%llu\\n",
+          event.nr_migrated(), event.nr_failed());
+  return std::string(line);
+}
+
+std::string FormatMmCompactionSuitable(
+    const MmCompactionSuitableFtraceEvent& event) {
+  char line[2048];
+  sprintf(line, "mm_compaction_suitable: node=%d zone=%-8s order=%d ret=%s\\n",
+          event.nid(), MmCompactionSuitableArray[event.idx()], event.order(),
+          MmCompactionRetArray[event.ret()]);
+  return std::string(line);
+}
+
+std::string FormatMmCompactionTryToCompactPages(
+    const MmCompactionTryToCompactPagesFtraceEvent& event) {
+  char line[2048];
+  sprintf(
+      line,
+      "mm_compaction_try_to_compact_pages: order=%d gfp_mask=0x%x mode=%d\\n",
+      event.order(), event.gfp_mask(),
+      event.mode());  // convert to int?
+  return std::string(line);
+}
+
+std::string FormatMmCompactionWakeupKcompactd(
+    const MmCompactionWakeupKcompactdFtraceEvent& event) {
+  char line[2048];
+  sprintf(
+      line,
+      "mm_compaction_wakeup_kcompactd: nid=%d order=%d classzone_idx=%-8s\\n",
+      event.nid(), event.order(),
+      MmCompactionSuitableArray[event.classzone_idx()]);
+  return std::string(line);
+}
+
+std::string FormatSuspendResume(const SuspendResumeFtraceEvent& event) {
+  char line[2048];
+  sprintf(line, "suspend_resume: %s[%u] %s\\n", event.action().c_str(),
+          event.val(), event.start() ? "begin" : "end");
+  return std::string(line);
+}
+
+std::string FormatSchedWakeupNew(const SchedWakeupNewFtraceEvent& event) {
+  char line[2048];
+  sprintf(line, "sched_wakeup_new: comm=%s pid=%d prio=%d target_cpu=%03d\\n",
+          event.comm().c_str(), event.pid(), event.prio(), event.target_cpu());
+  return std::string(line);
+}
+
+// TODO(taylori): Confirm correct format for this.
+std::string FormatProcess(const Process& process) {
+  char line[2048];
+  sprintf(line, "process: pid=%d ppid=%d cmdline=", process.pid(),
+          process.ppid());
+  std::string output = std::string(line);
+  for (auto field : process.cmdline()) {
+    char cmd[2048];
+    sprintf(cmd, "%s ", field.c_str());
+    output += std::string(cmd);
+  }
+  output += "\\n";
+  for (auto thread : process.threads()) {
+    char thread_line[2048];
+    sprintf(thread_line, "thread: tid=%d name=%s\\n", thread.tid(),
+            thread.name().c_str());
+    output += thread_line;
+  }
+  return output;
+}
+
 int TraceToSystrace(std::istream* input, std::ostream* output) {
   std::multimap<uint64_t, std::string> sorted;
 
@@ -673,6 +876,14 @@ int TraceToSystrace(std::istream* input, std::ostream* output) {
   }
 
   for (const TracePacket& packet : trace.packet()) {
+    if (packet.has_process_tree()) {
+      const ProcessTree& process_tree = packet.process_tree();
+      for (const auto& process : process_tree.processes()) {
+        std::string line = FormatProcess(process);
+        sorted.emplace(0, line);
+      }
+    }
+
     if (!packet.has_ftrace_events())
       continue;
 
@@ -829,6 +1040,51 @@ int TraceToSystrace(std::istream* input, std::ostream* output) {
       } else if (event.has_workqueue_activate_work()) {
         const auto& inner = event.workqueue_activate_work();
         line = FormatWorkqueueActivateWork(inner);
+      } else if (event.has_mm_compaction_begin()) {
+        const auto& inner = event.mm_compaction_begin();
+        line = FormatMmCompactionBegin(inner);
+      } else if (event.has_mm_compaction_deferred()) {
+        const auto& inner = event.mm_compaction_deferred();
+        line = FormatMmCompactionDeferred(inner);
+      } else if (event.has_mm_compaction_defer_reset()) {
+        const auto& inner = event.mm_compaction_defer_reset();
+        line = FormatMmCompactionDeferReset(inner);
+      } else if (event.has_mm_compaction_end()) {
+        const auto& inner = event.mm_compaction_end();
+        line = FormatMmCompactionEnd(inner);
+      } else if (event.has_mm_compaction_finished()) {
+        const auto& inner = event.mm_compaction_finished();
+        line = FormatMmCompactionFinished(inner);
+      } else if (event.has_mm_compaction_isolate_freepages()) {
+        const auto& inner = event.mm_compaction_isolate_freepages();
+        line = FormatMmCompactionIsolateFreepages(inner);
+      } else if (event.has_mm_compaction_isolate_migratepages()) {
+        const auto& inner = event.mm_compaction_isolate_migratepages();
+        line = FormatMmCompactionIsolateMigratepages(inner);
+      } else if (event.has_mm_compaction_kcompactd_sleep()) {
+        const auto& inner = event.mm_compaction_kcompactd_sleep();
+        line = FormatMmCompactionKcompactdSleep(inner);
+      } else if (event.has_mm_compaction_kcompactd_wake()) {
+        const auto& inner = event.mm_compaction_kcompactd_wake();
+        line = FormatMmCompactionKcompactdWake(inner);
+      } else if (event.has_mm_compaction_migratepages()) {
+        const auto& inner = event.mm_compaction_migratepages();
+        line = FormatMmCompactionMigratepages(inner);
+      } else if (event.has_mm_compaction_suitable()) {
+        const auto& inner = event.mm_compaction_suitable();
+        line = FormatMmCompactionSuitable(inner);
+      } else if (event.has_mm_compaction_try_to_compact_pages()) {
+        const auto& inner = event.mm_compaction_try_to_compact_pages();
+        line = FormatMmCompactionTryToCompactPages(inner);
+      } else if (event.has_mm_compaction_wakeup_kcompactd()) {
+        const auto& inner = event.mm_compaction_wakeup_kcompactd();
+        line = FormatMmCompactionWakeupKcompactd(inner);
+      } else if (event.has_suspend_resume()) {
+        const auto& inner = event.suspend_resume();
+        line = FormatSuspendResume(inner);
+      } else if (event.has_sched_wakeup_new()) {
+        const auto& inner = event.sched_wakeup_new();
+        line = FormatSchedWakeupNew(inner);
       } else {
         continue;
       }

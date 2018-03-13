@@ -16,6 +16,12 @@
 
 #include "cpu_reader.h"
 
+#include <signal.h>
+
+#include <dirent.h>
+#include <map>
+#include <queue>
+#include <string>
 #include <utility>
 
 #include "perfetto/base/logging.h"
@@ -35,7 +41,7 @@ namespace {
 bool ReadIntoString(const uint8_t* start,
                     const uint8_t* end,
                     size_t field_id,
-                    protozero::ProtoZeroMessage* out) {
+                    protozero::Message* out) {
   for (const uint8_t* c = start; c < end; c++) {
     if (*c != '\0')
       continue;
@@ -46,7 +52,7 @@ bool ReadIntoString(const uint8_t* start,
 }
 
 using BundleHandle =
-    protozero::ProtoZeroMessageHandle<protos::pbzero::FtraceEventBundle>;
+    protozero::MessageHandle<protos::pbzero::FtraceEventBundle>;
 
 const std::vector<bool> BuildEnabledVector(const ProtoTranslationTable& table,
                                            const std::set<std::string>& names) {
@@ -58,6 +64,20 @@ const std::vector<bool> BuildEnabledVector(const ProtoTranslationTable& table,
     enabled[event->ftrace_event_id] = true;
   }
   return enabled;
+}
+
+template <typename T>
+static void AddToInodeNumbers(const uint8_t* start,
+                              std::set<uint64_t>* inode_numbers) {
+  T t;
+  memcpy(&t, reinterpret_cast<const void*>(start), sizeof(T));
+  inode_numbers->insert(t);
+}
+
+void SetBlocking(int fd, bool is_blocking) {
+  int flags = fcntl(fd, F_GETFL, 0);
+  flags = (is_blocking) ? (flags & ~O_NONBLOCK) : (flags | O_NONBLOCK);
+  PERFETTO_CHECK(fcntl(fd, F_SETFL, flags) == 0);
 }
 
 // For further documentation of these constants see the kernel source:
@@ -96,42 +116,165 @@ EventFilter::~EventFilter() = default;
 
 CpuReader::CpuReader(const ProtoTranslationTable* table,
                      size_t cpu,
-                     base::ScopedFile fd)
-    : table_(table), cpu_(cpu), fd_(std::move(fd)) {}
+                     base::ScopedFile fd,
+                     std::function<void()> on_data_available)
+    : table_(table), cpu_(cpu), trace_fd_(std::move(fd)) {
+  int pipe_fds[2];
+  PERFETTO_CHECK(pipe(&pipe_fds[0]) == 0);
+  staging_read_fd_.reset(pipe_fds[0]);
+  staging_write_fd_.reset(pipe_fds[1]);
 
-int CpuReader::GetFileDescriptor() {
-  return fd_.get();
+  // Make reads from the raw pipe blocking so that splice() can sleep.
+  PERFETTO_CHECK(trace_fd_);
+  SetBlocking(*trace_fd_, true);
+
+  // Reads from the staging pipe are always non-blocking.
+  SetBlocking(*staging_read_fd_, false);
+
+  // Note: O_NONBLOCK seems to be ignored by splice() on the target pipe. The
+  // blocking vs non-blocking behavior is controlled solely by the
+  // SPLICE_F_NONBLOCK flag passed to splice().
+  SetBlocking(*staging_write_fd_, false);
+
+  // We need a non-default SIGPIPE handler to make it so that the blocking
+  // splice() is woken up when the ~CpuReader() dtor destroys the pipes.
+  // Just masking out the signal would cause an implicit syscall restart and
+  // hence make the join() in the dtor unreliable.
+  struct sigaction current_act = {};
+  PERFETTO_CHECK(sigaction(SIGPIPE, nullptr, &current_act) == 0);
+  if (current_act.sa_handler == SIG_DFL || current_act.sa_handler == SIG_IGN) {
+    struct sigaction act = {};
+    act.sa_sigaction = [](int, siginfo_t*, void*) {};
+    PERFETTO_CHECK(sigaction(SIGPIPE, &act, nullptr) == 0);
+  }
+
+  worker_thread_ =
+      std::thread(std::bind(&RunWorkerThread, cpu_, *trace_fd_,
+                            *staging_write_fd_, on_data_available));
+}
+
+CpuReader::~CpuReader() {
+  // The kernel's splice implementation for the trace pipe doesn't generate a
+  // SIGPIPE if the output pipe is closed (b/73807072). Instead, the call to
+  // close() on the pipe hangs forever. To work around this, we first close the
+  // trace fd (which prevents another splice from starting), raise SIGPIPE and
+  // wait for the worker to exit (i.e., to guarantee no splice is in progress)
+  // and only then close the staging pipe.
+  trace_fd_.reset();
+  pthread_kill(worker_thread_.native_handle(), SIGPIPE);
+  worker_thread_.join();
+}
+
+// static
+void CpuReader::RunWorkerThread(size_t cpu,
+                                int trace_fd,
+                                int staging_write_fd,
+                                std::function<void()> on_data_available) {
+  // This thread is responsible for moving data from the trace pipe into the
+  // staging pipe at least one page at a time. This is done using the splice(2)
+  // system call, which unlike poll/select makes it possible to block until at
+  // least a full page of data is ready to be read. The downside is that as the
+  // call is blocking we need a dedicated thread for each trace pipe (i.e.,
+  // CPU).
+  char thread_name[16];
+  snprintf(thread_name, sizeof(thread_name), "traced_probes%zu", cpu);
+  pthread_setname_np(pthread_self(), thread_name);
+
+  while (true) {
+    // First do a blocking splice which sleeps until there is at least one
+    // page of data available and enough space to write it into the staging
+    // pipe.
+    int splice_res = splice(trace_fd, nullptr, staging_write_fd, nullptr,
+                            base::kPageSize, SPLICE_F_MOVE);
+    if (splice_res < 0) {
+      // The kernel ftrace code has its own splice() implementation that can
+      // occasionally fail with transient errors not reported in man 2 splice.
+      // Just try again if we see these.
+      if (errno == ENOMEM || errno == EBUSY) {
+        PERFETTO_DPLOG("Transient splice failure -- retrying");
+        usleep(100 * 1000);
+        continue;
+      }
+      PERFETTO_DCHECK(errno == EPIPE || errno == EINTR || errno == EBADF);
+      break;  // ~CpuReader is waiting to join this thread.
+    }
+
+    // Then do as many non-blocking splices as we can. This moves any full
+    // pages from the trace pipe into the staging pipe as long as there is
+    // data in the former and space in the latter.
+    while (true) {
+      splice_res = splice(trace_fd, nullptr, staging_write_fd, nullptr,
+                          base::kPageSize, SPLICE_F_MOVE | SPLICE_F_NONBLOCK);
+      if (splice_res < 0) {
+        if (errno != EAGAIN && errno != ENOMEM && errno != EBUSY)
+          PERFETTO_PLOG("splice");
+        break;
+      }
+    }
+
+    // This callback will block until we are allowed to read more data.
+    on_data_available();
+  }
+}
+
+// static
+std::map<uint64_t, std::string> CpuReader::GetFilenamesForInodeNumbers(
+    const std::set<uint64_t>& inode_numbers) {
+  std::map<uint64_t, std::string> inode_to_filename;
+  if (inode_numbers.empty())
+    return inode_to_filename;
+  std::queue<std::string> queue;
+  // Starts reading files from current directory
+  queue.push(".");
+  while (!queue.empty()) {
+    struct dirent* entry;
+    std::string filepath = queue.front();
+    filepath += "/";
+    DIR* dir = opendir(queue.front().c_str());
+    queue.pop();
+    if (dir == nullptr)
+      continue;
+    while ((entry = readdir(dir)) != nullptr) {
+      std::string filename = entry->d_name;
+      if (filename.compare(".") == 0 || filename.compare("..") == 0)
+        continue;
+      uint64_t inode_number = entry->d_ino;
+      // Check if this inode number matches any of the passed in inode
+      // numbers from events
+      if (inode_numbers.find(inode_number) != inode_numbers.end())
+        inode_to_filename.emplace(inode_number, filepath + filename);
+      // Continue iterating through files if current entry is a directory
+      if (entry->d_type == DT_DIR)
+        queue.push(filepath + filename);
+    }
+    closedir(dir);
+  }
+  return inode_to_filename;
 }
 
 bool CpuReader::Drain(const std::array<const EventFilter*, kMaxSinks>& filters,
                       const std::array<BundleHandle, kMaxSinks>& bundles) {
-  if (!fd_)
-    return false;
+  PERFETTO_DCHECK_THREAD(thread_checker_);
+  while (true) {
+    uint8_t* buffer = GetBuffer();
+    long bytes =
+        PERFETTO_EINTR(read(*staging_read_fd_, buffer, base::kPageSize));
+    if (bytes == -1 && errno == EAGAIN)
+      return true;
+    PERFETTO_CHECK(static_cast<size_t>(bytes) == base::kPageSize);
 
-  uint8_t* buffer = GetBuffer();
-  // TOOD(hjd): One read() per page may be too many.
-  long bytes = PERFETTO_EINTR(read(fd_.get(), buffer, base::kPageSize));
-  if (bytes == -1 && errno == EAGAIN)
-    return false;
-  if (bytes != base::kPageSize)
-    return false;
-  PERFETTO_CHECK(static_cast<size_t>(bytes) <= base::kPageSize);
-
-  size_t evt_size = 0;
-  for (size_t i = 0; i < kMaxSinks; i++) {
-    if (!filters[i])
-      break;
-    evt_size = ParsePage(cpu_, buffer, filters[i], &*bundles[i], table_);
-    PERFETTO_DCHECK(evt_size);
+    size_t evt_size = 0;
+    for (size_t i = 0; i < kMaxSinks; i++) {
+      if (!filters[i])
+        break;
+      evt_size = ParsePage(cpu_, buffer, filters[i], &*bundles[i], table_);
+      PERFETTO_DCHECK(evt_size);
+    }
   }
-
-  // TODO(hjd): Introduce enum to distinguish real failures.
-  return evt_size > (base::kPageSize / 2);
 }
 
-CpuReader::~CpuReader() = default;
-
 uint8_t* CpuReader::GetBuffer() {
+  PERFETTO_DCHECK_THREAD(thread_checker_);
   // TODO(primiano): Guard against overflows, like BufferedFrameDeserializer.
   if (!buffer_)
     buffer_ = std::unique_ptr<uint8_t[]>(new uint8_t[base::kPageSize]);
@@ -169,6 +312,7 @@ size_t CpuReader::ParsePage(size_t cpu,
     return 0;
 
   uint64_t timestamp = page_header.timestamp;
+  std::set<uint64_t> inode_numbers;
 
   while (ptr < end) {
     EventHeader event_header;
@@ -182,7 +326,9 @@ size_t CpuReader::ParsePage(size_t cpu,
         // Left over page padding or discarded event.
         if (event_header.time_delta == 0) {
           // TODO(hjd): Look at the next few bytes for read size;
-          PERFETTO_CHECK(false);  // TODO(hjd): Handle
+          PERFETTO_ELOG("Padding time_delta == 0 not handled.");
+          PERFETTO_DCHECK(false);  // TODO(hjd): Handle
+          return 0;
         }
         uint32_t length;
         if (!ReadAndAdvance<uint32_t>(&ptr, end, &length))
@@ -213,7 +359,9 @@ size_t CpuReader::ParsePage(size_t cpu,
         // type_or_length is <=28 so it represents the length of a data record.
         if (event_header.type_or_length == 0) {
           // TODO(hjd): Look at the next few bytes for real size.
-          PERFETTO_CHECK(false);
+          PERFETTO_ELOG("Data type_or_length == 0 not handled.");
+          PERFETTO_DCHECK(false);
+          return 0;
         }
         const uint8_t* start = ptr;
         const uint8_t* next = ptr + 4 * event_header.type_or_length;
@@ -224,7 +372,8 @@ size_t CpuReader::ParsePage(size_t cpu,
         if (filter->IsEventEnabled(ftrace_event_id)) {
           protos::pbzero::FtraceEvent* event = bundle->add_event();
           event->set_timestamp(timestamp);
-          if (!ParseEvent(ftrace_event_id, start, next, table, event))
+          if (!ParseEvent(ftrace_event_id, start, next, table, event,
+                          &inode_numbers))
             return 0;
         }
 
@@ -242,7 +391,8 @@ bool CpuReader::ParseEvent(uint16_t ftrace_event_id,
                            const uint8_t* start,
                            const uint8_t* end,
                            const ProtoTranslationTable* table,
-                           protozero::ProtoZeroMessage* message) {
+                           protozero::Message* message,
+                           std::set<uint64_t>* inode_numbers) {
   PERFETTO_DCHECK(start < end);
   const size_t length = end - start;
 
@@ -258,14 +408,13 @@ bool CpuReader::ParseEvent(uint16_t ftrace_event_id,
 
   bool success = true;
   for (const Field& field : table->common_fields())
-    success &= ParseField(field, start, end, message);
+    success &= ParseField(field, start, end, message, inode_numbers);
 
-  protozero::ProtoZeroMessage* nested =
-      message->BeginNestedMessage<protozero::ProtoZeroMessage>(
-          info.proto_field_id);
+  protozero::Message* nested =
+      message->BeginNestedMessage<protozero::Message>(info.proto_field_id);
 
   for (const Field& field : info.fields)
-    success &= ParseField(field, start, end, nested);
+    success &= ParseField(field, start, end, nested, inode_numbers);
 
   // This finalizes |nested| automatically.
   message->Finalize();
@@ -280,12 +429,15 @@ bool CpuReader::ParseEvent(uint16_t ftrace_event_id,
 bool CpuReader::ParseField(const Field& field,
                            const uint8_t* start,
                            const uint8_t* end,
-                           protozero::ProtoZeroMessage* message) {
+                           protozero::Message* message,
+                           std::set<uint64_t>* inode_numbers) {
   PERFETTO_DCHECK(start + field.ftrace_offset + field.ftrace_size <= end);
   const uint8_t* field_start = start + field.ftrace_offset;
   uint32_t field_id = field.proto_field_id;
 
   switch (field.strategy) {
+    case kUint8ToUint32:
+    case kUint16ToUint32:
     case kUint32ToUint32:
     case kUint32ToUint64:
       ReadIntoVarInt<uint32_t>(field_start, field_id, message);
@@ -293,6 +445,7 @@ bool CpuReader::ParseField(const Field& field,
     case kUint64ToUint64:
       ReadIntoVarInt<uint64_t>(field_start, field_id, message);
       return true;
+    case kInt16ToInt32:
     case kInt32ToInt32:
     case kInt32ToInt64:
       ReadIntoVarInt<int32_t>(field_start, field_id, message);
@@ -309,6 +462,17 @@ bool CpuReader::ParseField(const Field& field,
       return ReadIntoString(field_start, end, field.proto_field_id, message);
     case kStringPtrToString:
       // TODO(hjd): Figure out how to read these.
+      return true;
+    case kBoolToUint32:
+      ReadIntoVarInt<uint32_t>(field_start, field_id, message);
+      return true;
+    case kInode32ToUint64:
+      ReadIntoVarInt<uint32_t>(field_start, field_id, message);
+      AddToInodeNumbers<uint32_t>(field_start, inode_numbers);
+      return true;
+    case kInode64ToUint64:
+      ReadIntoVarInt<uint64_t>(field_start, field_id, message);
+      AddToInodeNumbers<uint64_t>(field_start, inode_numbers);
       return true;
   }
   // Not reached, for gcc.

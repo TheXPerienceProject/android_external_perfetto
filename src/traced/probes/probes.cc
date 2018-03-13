@@ -14,18 +14,35 @@
  * limitations under the License.
  */
 
+#include <getopt.h>
+
 #include "perfetto/base/logging.h"
 #include "perfetto/base/unix_task_runner.h"
 #include "perfetto/traced/traced.h"
 
-#include "src/traced/probes/ftrace_producer.h"
+#include "src/traced/probes/probes_producer.h"
 
 namespace perfetto {
 
 int __attribute__((visibility("default"))) ProbesMain(int argc, char** argv) {
+  static struct option long_options[] = {
+      {"cleanup-after-crash", no_argument, 0, 'd'}, {nullptr, 0, 0, 0}};
+  int option_index;
+  int c;
+  while ((c = getopt_long(argc, argv, "", long_options, &option_index)) != -1) {
+    switch (c) {
+      case 'd':
+        HardResetFtraceState();
+        return 0;
+      default:
+        PERFETTO_ELOG("Usage: %s [--cleanup-after-crash]", argv[0]);
+        return 1;
+    }
+  }
+
   PERFETTO_LOG("Starting %s service", argv[0]);
   base::UnixTaskRunner task_runner;
-  FtraceProducer producer;
+  ProbesProducer producer;
   producer.ConnectWithRetries(PERFETTO_PRODUCER_SOCK_NAME, &task_runner);
   task_runner.Run();
   return 0;

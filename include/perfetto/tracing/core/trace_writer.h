@@ -17,7 +17,7 @@
 #ifndef INCLUDE_PERFETTO_TRACING_CORE_TRACE_WRITER_H_
 #define INCLUDE_PERFETTO_TRACING_CORE_TRACE_WRITER_H_
 
-#include "perfetto/protozero/protozero_message_handle.h"
+#include "perfetto/protozero/message_handle.h"
 
 namespace perfetto {
 
@@ -44,7 +44,7 @@ class TracePacket;
 class TraceWriter {
  public:
   using TracePacketHandle =
-      protozero::ProtoZeroMessageHandle<protos::pbzero::TracePacket>;
+      protozero::MessageHandle<protos::pbzero::TracePacket>;
 
   TraceWriter();
   virtual ~TraceWriter();

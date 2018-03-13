@@ -18,6 +18,7 @@
 #define SRC_FTRACE_READER_FTRACE_PROCFS_H_
 
 #include <memory>
+#include <set>
 #include <string>
 
 #include "perfetto/base/scoped_file.h"
@@ -28,7 +29,7 @@ class FtraceProcfs {
  public:
   static std::unique_ptr<FtraceProcfs> Create(const std::string& root);
 
-  FtraceProcfs(const std::string& root);
+  explicit FtraceProcfs(const std::string& root);
   virtual ~FtraceProcfs();
 
   // Enable the event under with the given |group| and |name|.
@@ -44,9 +45,6 @@ class FtraceProcfs {
   // virtual for testing.
   virtual std::string ReadEventFormat(const std::string& group,
                                       const std::string& name) const;
-
-  // Read the available_events file.
-  std::string ReadAvailableEvents() const;
 
   // Set ftrace buffer size in pages.
   // This size is *per cpu* so for the total size you have to multiply
@@ -69,16 +67,33 @@ class FtraceProcfs {
   // Disables tracing, does not clear the buffer.
   bool DisableTracing();
 
+  // Enabls/disables tracing, does not clear the buffer.
+  bool SetTracingOn(bool enable);
+
   // Returns true iff tracing is enabled.
   // Necessarily racy: another program could enable/disable tracing at any
   // point.
   bool IsTracingEnabled();
 
+  // Set the clock. |clock_name| should be one of the names returned by
+  // AvailableClocks. Setting the clock clears the buffer.
+  bool SetClock(const std::string& clock_name);
+
+  // Get the currently set clock.
+  std::string GetClock();
+
+  // Get all the avaiable clocks.
+  std::set<std::string> AvailableClocks();
+
   // Open the raw pipe for |cpu|.
   virtual base::ScopedFile OpenPipeForCpu(size_t cpu);
 
+ protected:
   // virtual and public for testing.
   virtual bool WriteToFile(const std::string& path, const std::string& str);
+  virtual bool ClearFile(const std::string& path);
+  virtual char ReadOneCharFromFile(const std::string& path);
+  virtual std::string ReadFileIntoString(const std::string& path) const;
 
  private:
   // Checks the trace file is present at the given root path.

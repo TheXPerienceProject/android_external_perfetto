@@ -19,7 +19,11 @@
 
 #include <functional>
 #include "perfetto/base/build_config.h"
+
+#if PERFETTO_BUILDFLAG(PERFETTO_OS_LINUX) || \
+    PERFETTO_BUILDFLAG(PERFETTO_OS_ANDROID)
 #include "perfetto/base/watchdog.h"
+#endif
 
 namespace perfetto {
 namespace base {
@@ -66,7 +70,9 @@ class TaskRunner {
 
  protected:
   static void RunTask(const std::function<void()>& task) {
-#if !BUILDFLAG(PERFETTO_CHROMIUM_BUILD)
+#if !PERFETTO_BUILDFLAG(PERFETTO_CHROMIUM_BUILD) && \
+    (PERFETTO_BUILDFLAG(PERFETTO_OS_LINUX) ||       \
+     PERFETTO_BUILDFLAG(PERFETTO_OS_ANDROID))
     base::WatchDog w(kWatchdogMillis);
 #endif
     task();

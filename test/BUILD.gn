@@ -32,7 +32,7 @@ source_set("end_to_end_integrationtests") {
     "../protos/perfetto/trace:lite",
     "../src/base:base",
     "../src/base:test_support",
-    "../src/traced/probes:ftrace_producer",
+    "../src/traced/probes:probes_src",
     "../src/tracing:ipc",
   ]
   sources = [
@@ -42,6 +42,9 @@ source_set("end_to_end_integrationtests") {
   ]
   if (is_android && !build_with_chromium) {
     deps += [ "../src/base:android_task_runner" ]
+  }
+  if (start_daemons_for_testing) {
+    cflags = [ "-DPERFETTO_START_DAEMONS_FOR_TESTING" ]
   }
 }
 

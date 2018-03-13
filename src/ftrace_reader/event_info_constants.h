@@ -45,28 +45,40 @@ enum ProtoFieldType {
 };
 
 enum FtraceFieldType {
-  kFtraceUint32 = 1,
+  kFtraceUint8 = 1,
+  kFtraceUint16,
+  kFtraceUint32,
   kFtraceUint64,
+  kFtraceInt16,
   kFtraceInt32,
   kFtraceInt64,
   kFtraceFixedCString,
   kFtraceCString,
   kFtraceStringPtr,
+  kFtraceBool,
+  kFtraceInode32,
+  kFtraceInode64,
 };
 
 // Joint enum of FtraceFieldType (left) and ProtoFieldType (right).
 // where there exists a way to convert from the FtraceFieldType
 // into the ProtoFieldType.
 enum TranslationStrategy {
-  kUint32ToUint32 = 1,
+  kUint8ToUint32 = 1,
+  kUint16ToUint32,
+  kUint32ToUint32,
   kUint32ToUint64,
   kUint64ToUint64,
+  kInt16ToInt32,
   kInt32ToInt32,
   kInt32ToInt64,
   kInt64ToInt64,
   kFixedCStringToString,
   kCStringToString,
   kStringPtrToString,
+  kBoolToUint32,
+  kInode32ToUint64,
+  kInode64ToUint64,
 };
 
 inline const char* ToString(ProtoFieldType v) {
@@ -109,10 +121,16 @@ inline const char* ToString(ProtoFieldType v) {
 
 inline const char* ToString(FtraceFieldType v) {
   switch (v) {
+    case kFtraceUint8:
+      return "uint8";
+    case kFtraceUint16:
+      return "uint16";
     case kFtraceUint32:
       return "uint32";
     case kFtraceUint64:
       return "uint64";
+    case kFtraceInt16:
+      return "int16";
     case kFtraceInt32:
       return "int32";
     case kFtraceInt64:
@@ -123,6 +141,12 @@ inline const char* ToString(FtraceFieldType v) {
       return "null terminated string";
     case kFtraceStringPtr:
       return "string ptr";
+    case kFtraceBool:
+      return "bool";
+    case kFtraceInode32:
+      return "inode32";
+    case kFtraceInode64:
+      return "inode64";
   }
   // For gcc:
   PERFETTO_CHECK(false);
@@ -186,7 +210,7 @@ bool SetTranslationStrategy(FtraceFieldType ftrace,
                             ProtoFieldType proto,
                             TranslationStrategy* out);
 
-Field FieldFromNameIdType(const char* name, size_t id, ProtoFieldType type);
+Field MakeField(const char* name, size_t id, ProtoFieldType type);
 
 }  // namespace perfetto
 

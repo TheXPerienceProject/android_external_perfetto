@@ -51,7 +51,7 @@ SharedMemoryArbiterImpl::SharedMemoryArbiterImpl(
     : task_runner_(task_runner),
       on_pages_complete_callback_(std::move(callback)),
       shmem_abi_(reinterpret_cast<uint8_t*>(start), size, page_size),
-      active_writer_ids_(SharedMemoryABI::kMaxWriterID) {}
+      active_writer_ids_(kMaxWriterID) {}
 
 Chunk SharedMemoryArbiterImpl::GetNewChunk(
     const SharedMemoryABI::ChunkHeader& header,
@@ -137,7 +137,7 @@ Chunk SharedMemoryArbiterImpl::GetNewChunk(
       PERFETTO_ELOG("Shared memory buffer overrun! Stalling");
 
       // TODO(primiano): sending the IPC synchronously is a temporary workaround
-      // until the backpressure logic in FtraceProducer is sorted out. Until
+      // until the backpressure logic in probes_producer is sorted out. Until
       // then the risk is that we stall the message loop waiting for the
       // tracing service to  consume the shared memory buffer (SMB) and, for
       // this reason, never run the task that tells the service to purge the

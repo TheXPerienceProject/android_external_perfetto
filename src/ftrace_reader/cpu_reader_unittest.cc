@@ -16,6 +16,8 @@
 
 #include "cpu_reader.h"
 
+#include <sys/stat.h>
+
 #include "event_info.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -33,7 +35,11 @@
 #include "src/ftrace_reader/test/test_messages.pb.h"
 #include "src/ftrace_reader/test/test_messages.pbzero.h"
 
+using testing::Each;
+using testing::ElementsAre;
 using testing::ElementsAreArray;
+using testing::Eq;
+using testing::Pair;
 
 namespace perfetto {
 
@@ -616,10 +622,22 @@ TEST(CpuReaderTest, ParseAllFields) {
                              &field->strategy);
     }
     {
-      // char -> string
+      // ino_t -> uint64
       event->fields.emplace_back(Field{});
       Field* field = &event->fields.back();
       field->ftrace_offset = 28;
+      field->ftrace_size = 4;
+      field->ftrace_type = kFtraceInode32;
+      field->proto_field_id = 503;
+      field->proto_field_type = kProtoUint64;
+      SetTranslationStrategy(field->ftrace_type, field->proto_field_type,
+                             &field->strategy);
+    }
+    {
+      // char -> string
+      event->fields.emplace_back(Field{});
+      Field* field = &event->fields.back();
+      field->ftrace_offset = 32;
       field->ftrace_size = 0;
       field->ftrace_type = kFtraceCString;
       field->proto_field_id = 501;
@@ -637,14 +655,21 @@ TEST(CpuReaderTest, ParseAllFields) {
   writer.Write<int32_t>(9999);  // A gap we shouldn't read.
   writer.Write<int32_t>(1002);
   writer.WriteFixedString(16, "Hello");
+  // Use a file that is pushed for both linux and android to ensure this passes
+  std::string filename =
+      "./src/ftrace_reader/test/data/android_seed_N2F62_3.10.49/events";
+  struct stat buf;
+  ASSERT_NE(stat(filename.c_str(), &buf), -1);
+  writer.Write<int32_t>(buf.st_ino);
   writer.WriteFixedString(300, "Goodbye");
 
   auto input = writer.GetCopy();
   auto length = writer.written();
+  std::set<uint64_t> inode_numbers;
 
   ASSERT_TRUE(CpuReader::ParseEvent(ftrace_event_id, input.get(),
                                     input.get() + length, &table,
-                                    provider.writer()));
+                                    provider.writer(), &inode_numbers));
 
   auto event = provider.ParseProto();
   ASSERT_TRUE(event);
@@ -653,6 +678,12 @@ TEST(CpuReaderTest, ParseAllFields) {
   EXPECT_EQ(event->all_fields().field_uint32(), 1002ul);
   EXPECT_EQ(event->all_fields().field_char_16(), "Hello");
   EXPECT_EQ(event->all_fields().field_char(), "Goodbye");
+  EXPECT_EQ(event->all_fields().field_inode(), buf.st_ino);
+  // Check inode number gets added and linked to the correct file
+  EXPECT_THAT(inode_numbers, Each(Eq(buf.st_ino)));
+  std::map<uint64_t, std::string> inode_to_filename =
+      CpuReader::GetFilenamesForInodeNumbers(inode_numbers);
+  EXPECT_THAT(inode_to_filename, ElementsAre(Pair(buf.st_ino, filename)));
 }
 
 // # tracer: nop
@@ -857,7 +888,7 @@ ExamplePage g_full_page_sched_switch{
 00000070: 6561 6400 6572 0000 7002 0000 6100 0000  ead.er..p...a...
 00000080: 0100 0000 0000 0000 4a69 7420 7468 7265  ........Jit thre
 00000090: 6164 2070 6f6f 6c00 140d 0000 8100 0000  ad pool.........
-000000a0: 50c2 0910 2f00 0103 140d 0000 4a69 7420  P.../.......Jit 
+000000a0: 50c2 0910 2f00 0103 140d 0000 4a69 7420  P.../.......Jit
 000000b0: 7468 7265 6164 2070 6f6f 6c00 140d 0000  thread pool.....
 000000c0: 8100 0000 0100 0000 0000 0000 7377 6170  ............swap
 000000d0: 7065 722f 3000 0000 0000 0000 0000 0000  per/0...........

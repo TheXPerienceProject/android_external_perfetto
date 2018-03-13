@@ -44,11 +44,11 @@ void FakeConsumer::Connect(const char* socket_name) {
 
 void FakeConsumer::OnConnect() {
   endpoint_->EnableTracing(trace_config_);
-  task_runner_->PostDelayedTask(std::bind([this]() {
-                                  endpoint_->DisableTracing();
-                                  endpoint_->ReadBuffers();
-                                }),
-                                trace_config_.duration_ms());
+}
+
+void FakeConsumer::ReadTraceData() {
+  endpoint_->DisableTracing();
+  endpoint_->ReadBuffers();
 }
 
 void FakeConsumer::OnDisconnect() {
@@ -57,6 +57,16 @@ void FakeConsumer::OnDisconnect() {
 
 void FakeConsumer::OnTraceData(std::vector<TracePacket> data, bool has_more) {
   packet_callback_(std::move(data), has_more);
+}
+
+void FakeConsumer::BusyWaitReadBuffers() {
+  task_runner_->PostDelayedTask(
+      std::bind([this]() {
+        endpoint_->ReadBuffers();
+        task_runner_->PostDelayedTask(
+            std::bind([this]() { BusyWaitReadBuffers(); }), 1);
+      }),
+      1);
 }
 
 }  // namespace perfetto

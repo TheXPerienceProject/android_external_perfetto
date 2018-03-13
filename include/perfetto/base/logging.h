@@ -32,7 +32,7 @@
 #include "perfetto/base/build_config.h"
 #include "perfetto/base/utils.h"
 
-#if BUILDFLAG(OS_ANDROID)
+#if PERFETTO_BUILDFLAG(PERFETTO_OS_ANDROID)
 #include <android/log.h>
 #endif
 
@@ -72,7 +72,7 @@ constexpr const char* kLogFmt[] = {"\x1b[2m", "\x1b[39m", "\x1b[32m\x1b[1m",
 
 // Let android log to both stderr and logcat. When part of the Android tree
 // stderr points to /dev/null so logcat is the only way to get some logging.
-#if BUILDFLAG(OS_ANDROID)
+#if PERFETTO_BUILDFLAG(PERFETTO_OS_ANDROID)
 #define PERFETTO_XLOG(level, fmt, ...)                                         \
   do {                                                                         \
     __android_log_print(                                                       \
@@ -100,6 +100,9 @@ constexpr const char* kLogFmt[] = {"\x1b[2m", "\x1b[39m", "\x1b[32m\x1b[1m",
     PERFETTO_IMMEDIATE_CRASH();        \
   } while (0)
 
+#define PERFETTO_PLOG(x) \
+  PERFETTO_ELOG("%s (errno: %d, %s)", (x), errno, strerror(errno))
+
 #if PERFETTO_DCHECK_IS_ON()
 
 #define PERFETTO_DLOG(fmt, ...) PERFETTO_XLOG(kLogDebug, fmt, ##__VA_ARGS__)
@@ -109,7 +112,7 @@ constexpr const char* kLogFmt[] = {"\x1b[2m", "\x1b[39m", "\x1b[32m\x1b[1m",
 
 #define PERFETTO_DCHECK(x)                      \
   do {                                          \
-    if (!__builtin_expect(!!(x), true)) {       \
+    if (PERFETTO_UNLIKELY(!(x))) {              \
       PERFETTO_DPLOG("PERFETTO_CHECK(" #x ")"); \
       PERFETTO_IMMEDIATE_CRASH();               \
     }                                           \
@@ -128,7 +131,7 @@ constexpr const char* kLogFmt[] = {"\x1b[2m", "\x1b[39m", "\x1b[32m\x1b[1m",
 #else
 #define PERFETTO_CHECK(x)                            \
   do {                                               \
-    if (!__builtin_expect(!!(x), true)) {            \
+    if (PERFETTO_UNLIKELY(!(x))) {                   \
       PERFETTO_ELOG("%s", "PERFETTO_CHECK(" #x ")"); \
       PERFETTO_IMMEDIATE_CRASH();                    \
     }                                                \

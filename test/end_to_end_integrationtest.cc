@@ -32,27 +32,27 @@
 #include "perfetto/tracing/ipc/service_ipc_host.h"
 
 #include "src/base/test/test_task_runner.h"
-#include "src/traced/probes/ftrace_producer.h"
+#include "src/traced/probes/probes_producer.h"
 #include "test/fake_consumer.h"
 #include "test/fake_producer.h"
 #include "test/task_runner_thread.h"
 
-#if BUILDFLAG(PERFETTO_ANDROID_BUILD)
+#if PERFETTO_BUILDFLAG(PERFETTO_OS_ANDROID)
 #include "perfetto/base/android_task_runner.h"
 #endif
 
 namespace perfetto {
 
-#if BUILDFLAG(PERFETTO_ANDROID_BUILD)
+#if PERFETTO_BUILDFLAG(PERFETTO_OS_ANDROID)
 using PlatformTaskRunner = base::AndroidTaskRunner;
 #else
 using PlatformTaskRunner = base::UnixTaskRunner;
 #endif
 
-// If we're building on Android but not as a CTS test, create the the producer
-// and consumer socket in a world writable directory so permissions are not a
-// problem.
-#if BUILDFLAG(OS_ANDROID) && !BUILDFLAG(PERFETTO_ANDROID_BUILD)
+// If we're building on Android and starting the daemons ourselves,
+// create the sockets in a world-writable location.
+#if PERFETTO_BUILDFLAG(PERFETTO_OS_ANDROID) && \
+    PERFETTO_BUILDFLAG(PERFETTO_START_DAEMONS)
 #define TEST_PRODUCER_SOCK_NAME "/data/local/tmp/traced_producer"
 #define TEST_CONSUMER_SOCK_NAME "/data/local/tmp/traced_consumer"
 #else
@@ -66,9 +66,7 @@ class PerfettoTest : public ::testing::Test {
   ~PerfettoTest() override = default;
 
  protected:
-  // This is used only in standalone integrations tests. In CTS mode (i.e. when
-  // PERFETTO_ANDROID_BUILD) this code is not used and instead the system
-  // daemons are used
+  // This is used only in daemon starting integrations tests.
   class ServiceDelegate : public ThreadDelegate {
    public:
     ServiceDelegate() = default;
@@ -85,48 +83,54 @@ class PerfettoTest : public ::testing::Test {
     std::unique_ptr<ServiceIPCHost> svc_;
   };
 
-  // This is used only in standalone integrations tests. In CTS mode (i.e. when
-  // PERFETTO_ANDROID_BUILD) this code is not used and instead the system
-  // daemons are used.
-  class FtraceProducerDelegate : public ThreadDelegate {
+  // This is used only in daemon starting integrations tests.
+  class ProbesProducerDelegate : public ThreadDelegate {
    public:
-    FtraceProducerDelegate() = default;
-    ~FtraceProducerDelegate() override = default;
+    ProbesProducerDelegate() = default;
+    ~ProbesProducerDelegate() override = default;
 
     void Initialize(base::TaskRunner* task_runner) override {
-      producer_.reset(new FtraceProducer);
+      producer_.reset(new ProbesProducer);
       producer_->ConnectWithRetries(TEST_PRODUCER_SOCK_NAME, task_runner);
     }
 
    private:
-    std::unique_ptr<FtraceProducer> producer_;
+    std::unique_ptr<ProbesProducer> producer_;
   };
 
   class FakeProducerDelegate : public ThreadDelegate {
    public:
-    FakeProducerDelegate() = default;
+    FakeProducerDelegate(std::function<void()> connect_callback)
+        : connect_callback_(std::move(connect_callback)) {}
     ~FakeProducerDelegate() override = default;
 
     void Initialize(base::TaskRunner* task_runner) override {
       producer_.reset(new FakeProducer("android.perfetto.FakeProducer"));
-      producer_->Connect(TEST_PRODUCER_SOCK_NAME, task_runner);
+      producer_->Connect(TEST_PRODUCER_SOCK_NAME, task_runner,
+                         std::move(connect_callback_));
     }
 
    private:
     std::unique_ptr<FakeProducer> producer_;
+    std::function<void()> connect_callback_;
   };
 };
 
-// TODO(lalitm): reenable this when we have a solution for running ftrace
-// on travis.
-TEST_F(PerfettoTest, DISABLED_TestFtraceProducer) {
+// TODO(b/73453011): reenable this on more platforms (including standalone
+// Android).
+#if defined(PERFETTO_BUILD_WITH_ANDROID)
+#define MAYBE_TestFtraceProducer TestFtraceProducer
+#else
+#define MAYBE_TestFtraceProducer DISABLED_TestFtraceProducer
+#endif
+TEST_F(PerfettoTest, MAYBE_TestFtraceProducer) {
   base::TestTaskRunner task_runner;
   auto finish = task_runner.CreateCheckpoint("no.more.packets");
 
   // Setip the TraceConfig for the consumer.
   TraceConfig trace_config;
   trace_config.add_buffers()->set_size_kb(4096 * 10);
-  trace_config.set_duration_ms(200);
+  trace_config.set_duration_ms(10000);
 
   // Create the buffer for ftrace.
   auto* ds_config = trace_config.add_data_sources()->mutable_config();
@@ -135,8 +139,8 @@ TEST_F(PerfettoTest, DISABLED_TestFtraceProducer) {
 
   // Setup the config for ftrace.
   auto* ftrace_config = ds_config->mutable_ftrace_config();
-  *ftrace_config->add_event_names() = "sched_switch";
-  *ftrace_config->add_event_names() = "bar";
+  *ftrace_config->add_ftrace_events() = "sched_switch";
+  *ftrace_config->add_ftrace_events() = "bar";
 
   // Create the function to handle packets as they come in.
   uint64_t total = 0;
@@ -161,30 +165,40 @@ TEST_F(PerfettoTest, DISABLED_TestFtraceProducer) {
     }
   };
 
-// If we're building with the Android platform (i.e. CTS), we expect that
-// the service and ftrace producer both exist and are already running.
-// TODO(lalitm): maybe add an additional build flag for CTS.
-#if !BUILDFLAG(PERFETTO_ANDROID_BUILD)
+#if PERFETTO_BUILDFLAG(PERFETTO_START_DAEMONS)
   TaskRunnerThread service_thread;
   service_thread.Start(std::unique_ptr<ServiceDelegate>(new ServiceDelegate));
 
   TaskRunnerThread producer_thread;
   producer_thread.Start(
-      std::unique_ptr<FtraceProducerDelegate>(new FtraceProducerDelegate));
+      std::unique_ptr<ProbesProducerDelegate>(new ProbesProducerDelegate));
 #endif
 
   // Finally, make the consumer connect to the service.
   FakeConsumer consumer(trace_config, std::move(function), &task_runner);
   consumer.Connect(TEST_CONSUMER_SOCK_NAME);
 
-  task_runner.RunUntilCheckpoint("no.more.packets");
+  // TODO(skyostil): There's a race here before the service processes our data
+  // and the consumer tries to retrieve it. For now wait a bit until the service
+  // is done, but we should add explicit flushing to avoid this.
+  task_runner.PostDelayedTask([&consumer]() { consumer.ReadTraceData(); },
+                              13000);
+
+  task_runner.RunUntilCheckpoint("no.more.packets", 20000);
 }
 
-TEST_F(PerfettoTest, TestFakeProducer) {
+// TODO(b/73453011): reenable this on more platforms (including standalone
+// Android).
+#if defined(PERFETTO_BUILD_WITH_ANDROID)
+#define MAYBE_TestFakeProducer TestFakeProducer
+#else
+#define MAYBE_TestFakeProducer DISABLED_TestFakeProducer
+#endif
+TEST_F(PerfettoTest, MAYBE_TestFakeProducer) {
   base::TestTaskRunner task_runner;
   auto finish = task_runner.CreateCheckpoint("no.more.packets");
 
-  // Setip the TraceConfig for the consumer.
+  // Setup the TraceConfig for the consumer.
   TraceConfig trace_config;
   trace_config.add_buffers()->set_size_kb(4096 * 10);
   trace_config.set_duration_ms(200);
@@ -201,8 +215,10 @@ TEST_F(PerfettoTest, TestFakeProducer) {
     if (has_more) {
       for (auto& packet : packets) {
         packet.Decode();
-        ASSERT_TRUE(packet->has_test());
-        ASSERT_EQ(packet->test(), "test");
+        ASSERT_TRUE(packet->has_for_testing());
+        ASSERT_EQ(protos::TracePacket::kTrustedUid,
+                  packet->optional_trusted_uid_case());
+        ASSERT_EQ(packet->for_testing().str(), "test");
       }
       total += packets.size();
 
@@ -215,21 +231,24 @@ TEST_F(PerfettoTest, TestFakeProducer) {
     }
   };
 
-// If we're building with the Android platform (i.e. CTS), we expect that
-// the service and ftrace producer both exist and are already running.
-// TODO(lalitm): maybe add an additional build flag for CTS.
-#if !BUILDFLAG(PERFETTO_ANDROID_BUILD)
+#if PERFETTO_BUILDFLAG(PERFETTO_START_DAEMONS)
   TaskRunnerThread service_thread;
   service_thread.Start(std::unique_ptr<ServiceDelegate>(new ServiceDelegate));
-
-  TaskRunnerThread producer_thread;
-  producer_thread.Start(
-      std::unique_ptr<FakeProducerDelegate>(new FakeProducerDelegate));
 #endif
+
+  auto data_produced = task_runner.CreateCheckpoint("data.produced");
+  TaskRunnerThread producer_thread;
+  producer_thread.Start(std::unique_ptr<FakeProducerDelegate>(
+      new FakeProducerDelegate([&task_runner, &data_produced] {
+        task_runner.PostTask(data_produced);
+      })));
 
   // Finally, make the consumer connect to the service.
   FakeConsumer consumer(trace_config, std::move(function), &task_runner);
   consumer.Connect(TEST_CONSUMER_SOCK_NAME);
+
+  task_runner.RunUntilCheckpoint("data.produced");
+  consumer.ReadTraceData();
 
   task_runner.RunUntilCheckpoint("no.more.packets");
 }

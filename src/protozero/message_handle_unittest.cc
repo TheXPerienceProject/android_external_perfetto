@@ -14,21 +14,21 @@
  * limitations under the License.
  */
 
-#include "perfetto/protozero/protozero_message_handle.h"
+#include "perfetto/protozero/message_handle.h"
 
 #include "gtest/gtest.h"
-#include "perfetto/protozero/protozero_message.h"
+#include "perfetto/protozero/message.h"
 
 namespace protozero {
 
 namespace {
 
-TEST(ProtoZeroMessageHandleTest, MoveHandleSharedMessageDoesntFinalize) {
-  ProtoZeroMessage message;
+TEST(MessageHandleTest, MoveHandleSharedMessageDoesntFinalize) {
+  Message message;
   message.Reset(nullptr);
 
-  ProtoZeroMessageHandle<ProtoZeroMessage> handle_1(&message);
-  handle_1 = ProtoZeroMessageHandle<ProtoZeroMessage>(&message);
+  MessageHandle<Message> handle_1(&message);
+  handle_1 = MessageHandle<Message>(&message);
   ASSERT_FALSE(handle_1->is_finalized());
 }
 

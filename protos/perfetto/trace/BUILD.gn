@@ -20,12 +20,14 @@ proto_sources = [
   "test_event.proto",
   "trace_packet.proto",
   "trace.proto",
+  "trusted_packet.proto",
 ]
 
 # Protozero generated stubs, for writers.
 protozero_library("zero") {
   deps = [
     "ftrace:zero",
+    "ps:zero",
   ]
   sources = proto_sources
   proto_in_dir = "$perfetto_root_path/protos"
@@ -39,6 +41,7 @@ proto_library("lite") {
   deps = [
     "../ipc",
     "ftrace:lite",
+    "ps:lite",
   ]
   sources = proto_sources
   proto_in_dir = "$perfetto_root_path/protos"

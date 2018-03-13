@@ -19,7 +19,7 @@
 
 #include <forward_list>
 
-#include "perfetto/protozero/protozero_message_handle.h"
+#include "perfetto/protozero/message_handle.h"
 #include "perfetto/protozero/scattered_stream_writer.h"
 #include "perfetto/tracing/core/basic_types.h"
 #include "perfetto/tracing/core/shared_memory_abi.h"
@@ -106,7 +106,7 @@ class TraceWriterImpl : public TraceWriter,
   // have to release the ownership of the current Chunk). This list will be
   // later sent out-of-band to the tracing service, who will patch the required
   // chunks, if they are still around.
-  // Note: the ProtoZeroMessage will take pointers to the |size_field| of these
+  // Note: the Message will take pointers to the |size_field| of these
   // entries. This container must guarantee that the Patch objects are never
   // moved around (i.e. cannot be a vector because of reallocations can change
   // addresses of pre-existing entries).

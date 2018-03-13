@@ -28,21 +28,27 @@ group("all") {
     ":perfetto_unittests",
     "src/ipc/protoc_plugin:ipc_plugin($host_toolchain)",
     "src/protozero/protoc_plugin($host_toolchain)",
-    "tools/ftrace_proto_gen:ftrace_proto_gen",
     "tools/proto_to_cpp",
     "tools/trace_to_text",
   ]
+  if (is_linux || is_android) {
+    deps += [ "tools/ftrace_proto_gen:ftrace_proto_gen" ]
+  }
   if (!build_with_chromium) {
     deps += [
-      ":perfetto",
-      ":perfetto_benchmarks",
-      ":perfetto_integrationtests",
-      ":traced",
-      ":traced_probes",
       "protos/perfetto/config:merged_config",  # For syntax-checking the proto.
       "test/configs",
       "tools:protoc_helper",
     ]
+    if (is_linux || is_android) {
+      deps += [
+        ":perfetto",
+        ":perfetto_benchmarks",
+        ":perfetto_integrationtests",
+        ":traced",
+        ":traced_probes",
+      ]
+    }
   }
 }
 
@@ -52,18 +58,22 @@ executable("perfetto_unittests") {
     "gn:default_deps",
     "gn:gtest_main",
     "src/base:base_unittests",
-    "src/ftrace_reader:ftrace_reader_unittests",
     "src/ipc:perfetto_ipc_unittests",
     "src/protozero:protozero_unittests",
     "src/tracing:tracing_unittests",
-    "tools/ftrace_proto_gen:ftrace_proto_gen_unittests",
   ]
+  if (is_linux || is_android) {
+    deps += [
+      "src/ftrace_reader:ftrace_reader_unittests",
+      "tools/ftrace_proto_gen:ftrace_proto_gen_unittests",
+    ]
+  }
   if (!build_with_chromium) {
     deps += [ "tools/sanitizers_unittests" ]
   }
 }
 
-if (!build_with_chromium) {
+if (!build_with_chromium && (is_linux || is_android)) {
   executable("perfetto_benchmarks") {
     testonly = true
     deps = [
@@ -136,9 +146,11 @@ if (!build_with_chromium) {
     sources = [
       "src/traced/perfetto_cmd/main.cc",
     ]
+    if (is_android) {
+      deps += [ "src/base:android_task_runner" ]
+    }
     if (build_with_android) {
       cflags = [ "-DPERFETTO_BUILD_WITH_ANDROID" ]
-      deps += [ "src/base:android_task_runner" ]
       libs = [
         "binder",
         "services",

@@ -24,13 +24,13 @@
 #include "perfetto/tracing/core/trace_writer.h"
 #include "perfetto/tracing/ipc/producer_ipc_client.h"
 
-#ifndef SRC_TRACED_PROBES_FTRACE_PRODUCER_H_
-#define SRC_TRACED_PROBES_FTRACE_PRODUCER_H_
+#ifndef SRC_TRACED_PROBES_PROBES_PRODUCER_H_
+#define SRC_TRACED_PROBES_PROBES_PRODUCER_H_
 
 namespace perfetto {
-class FtraceProducer : public Producer {
+class ProbesProducer : public Producer {
  public:
-  ~FtraceProducer() override;
+  ~ProbesProducer() override;
 
   // Producer Impl:
   void OnConnect() override;
@@ -42,10 +42,14 @@ class FtraceProducer : public Producer {
   // Our Impl
   void ConnectWithRetries(const char* socket_name,
                           base::TaskRunner* task_runner);
+  void CreateFtraceDataSourceInstance(DataSourceInstanceID id,
+                                      const DataSourceConfig& source_config);
+  void CreateProcessStatsDataSourceInstance(
+      const DataSourceConfig& source_config);
 
  private:
-  using BundleHandle =
-      protozero::ProtoZeroMessageHandle<protos::pbzero::FtraceEventBundle>;
+  using FtraceBundleHandle =
+      protozero::MessageHandle<protos::pbzero::FtraceEventBundle>;
 
   class SinkDelegate : public FtraceSink::Delegate {
    public:
@@ -53,15 +57,18 @@ class FtraceProducer : public Producer {
     ~SinkDelegate() override;
 
     // FtraceDelegateImpl
-    BundleHandle GetBundleForCpu(size_t cpu) override;
-    void OnBundleComplete(size_t cpu, BundleHandle bundle) override;
+    FtraceBundleHandle GetBundleForCpu(size_t cpu) override;
+    void OnBundleComplete(size_t cpu, FtraceBundleHandle bundle) override;
 
     void sink(std::unique_ptr<FtraceSink> sink) { sink_ = std::move(sink); }
 
    private:
     std::unique_ptr<FtraceSink> sink_ = nullptr;
-    TraceWriter::TracePacketHandle trace_packet_;
     std::unique_ptr<TraceWriter> writer_;
+
+    // Keep this after the TraceWriter because TracePackets must not outlive
+    // their originating writer.
+    TraceWriter::TracePacketHandle trace_packet_;
   };
 
   enum State {
@@ -79,11 +86,14 @@ class FtraceProducer : public Producer {
   base::TaskRunner* task_runner_;
   std::unique_ptr<Service::ProducerEndpoint> endpoint_ = nullptr;
   std::unique_ptr<FtraceController> ftrace_ = nullptr;
-  DataSourceID data_source_id_ = 0;
+  bool ftrace_creation_failed_ = false;
   uint64_t connection_backoff_ms_ = 0;
   const char* socket_name_ = nullptr;
+  // Keeps track of id for each type of data source.
+  std::map<DataSourceInstanceID, std::string> instances_;
   std::map<DataSourceInstanceID, std::unique_ptr<SinkDelegate>> delegates_;
+  std::map<DataSourceInstanceID, base::WatchDog> watchdogs_;
 };
 }  // namespace perfetto
 
-#endif  // SRC_TRACED_PROBES_FTRACE_PRODUCER_H_
+#endif  // SRC_TRACED_PROBES_PROBES_PRODUCER_H_

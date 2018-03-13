@@ -17,10 +17,11 @@
 #include <fstream>
 #include <sstream>
 
-#include "ftrace_procfs.h"
 #include "gmock/gmock.h"
 #include "google/protobuf/text_format.h"
 #include "gtest/gtest.h"
+
+#include "ftrace_procfs.h"
 #include "perfetto/base/build_config.h"
 #include "perfetto/base/unix_task_runner.h"
 #include "perfetto/base/utils.h"
@@ -41,8 +42,8 @@ namespace {
 
 const char kTracingPath[] = "/sys/kernel/debug/tracing/";
 
-using BundleHandle =
-    protozero::ProtoZeroMessageHandle<protos::pbzero::FtraceEventBundle>;
+using FtraceBundleHandle =
+    protozero::MessageHandle<protos::pbzero::FtraceEventBundle>;
 
 class EndToEndIntegrationTest : public ::testing::Test,
                                 public FtraceSink::Delegate {
@@ -69,14 +70,14 @@ class EndToEndIntegrationTest : public ::testing::Test,
     message->set_before("--- Bundle wrapper before ---");
   }
 
-  virtual BundleHandle GetBundleForCpu(size_t cpu) {
+  virtual FtraceBundleHandle GetBundleForCpu(size_t cpu) {
     PERFETTO_CHECK(!currently_writing_);
     currently_writing_ = true;
     cpu_being_written_ = cpu;
-    return BundleHandle(message->add_bundle());
+    return FtraceBundleHandle(message->add_bundle());
   }
 
-  virtual void OnBundleComplete(size_t cpu, BundleHandle bundle) {
+  virtual void OnBundleComplete(size_t cpu, FtraceBundleHandle bundle) {
     PERFETTO_CHECK(currently_writing_);
     currently_writing_ = false;
     EXPECT_NE(cpu_being_written_, 9999ul);
@@ -106,7 +107,9 @@ TEST_F(EndToEndIntegrationTest, DISABLED_SchedSwitchAndPrint) {
 
   // Create a sink listening for our favorite events:
   std::unique_ptr<FtraceController> ftrace = FtraceController::Create(runner());
-  FtraceConfig config(std::set<std::string>({"print", "sched_switch"}));
+  FtraceConfig config;
+  *config.add_ftrace_events() = "print";
+  *config.add_ftrace_events() = "sched_switch";
   std::unique_ptr<FtraceSink> sink = ftrace->CreateSink(config, this);
 
   // Let some events build up.
@@ -131,15 +134,16 @@ TEST_F(EndToEndIntegrationTest, DISABLED_SchedSwitchAndPrint) {
   printf("%s\n", output_as_text.c_str());
 }
 
-#if BUILDFLAG(OS_ANDROID)
+#if PERFETTO_BUILDFLAG(PERFETTO_OS_ANDROID)
 TEST_F(EndToEndIntegrationTest, DISABLED_Atrace) {
   FtraceProcfs procfs(kTracingPath);
   procfs.ClearTrace();
 
   // Create a sink listening for our favorite events:
   std::unique_ptr<FtraceController> ftrace = FtraceController::Create(runner());
-  FtraceConfig config(std::set<std::string>({"sched_switch"}));
-  config.AddAtraceCategory("sched");
+  FtraceConfig config;
+  *config.add_ftrace_events() = "print";
+  *config.add_ftrace_events() = "sched_switch";
   std::unique_ptr<FtraceSink> sink = ftrace->CreateSink(config, this);
 
   // Let some events build up.
@@ -162,6 +166,6 @@ TEST_F(EndToEndIntegrationTest, DISABLED_Atrace) {
   std::string output_as_text;
   printf("%s\n", output_as_text.c_str());
 }
-#endif  // BUILDFLAG(OS_ANDROID)
+#endif  // PERFETTO_BUILDFLAG(PERFETTO_OS_ANDROID)
 
 }  // namespace perfetto

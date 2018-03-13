@@ -25,8 +25,12 @@ service traced_probes /system/bin/traced_probes
     class late_start
     disabled
     user nobody
-    group shell
+    group nobody readproc
     writepid /dev/cpuset/system-background/tasks
+    # Clean up procfs configuration even if traced_probes crashes
+    # unexpectedly.
+    onrestart exec_background - nobody shell -- /system/bin/traced_probes --cleanup-after-crash
+    file /dev/kmsg w
 
 on property:persist.traced.enable=1
     # Trace files need to be:
@@ -39,3 +43,7 @@ on property:persist.traced.enable=1
 
     start traced
     start traced_probes
+
+on property:persist.traced.enable=0
+    stop traced
+    stop traced_probes

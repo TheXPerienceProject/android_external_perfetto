@@ -23,6 +23,7 @@
 #include "src/tracing/core/shared_memory_arbiter_impl.h"
 #include "src/tracing/test/aligned_buffer_test.h"
 
+#include "perfetto/trace/test_event.pbzero.h"
 #include "perfetto/trace/trace_packet.pbzero.h"
 
 namespace perfetto {
@@ -63,7 +64,7 @@ TEST_P(TraceWriterImplTest, SingleWriter) {
     auto packet = writer->NewTracePacket();
     char str[16];
     sprintf(str, "foobar %zu", i);
-    packet->set_test(str);
+    packet->set_for_testing()->set_str(str);
   }
 
   // Destroying the TraceWriteImpl should cause the last packet to be finalized
@@ -82,7 +83,7 @@ TEST_P(TraceWriterImplTest, SingleWriter) {
       auto chunk = abi->TryAcquireChunkForReading(page_idx, chunk_idx, kBufId);
       if (!chunk.is_valid())
         continue;
-      packets_count += chunk.header()->packets_state.load().count;
+      packets_count += chunk.header()->packets.load().count;
     }
   }
   EXPECT_EQ(kNumPackets, packets_count);
