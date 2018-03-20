@@ -103,7 +103,12 @@ void HostImpl::OnDataAvailable(UnixSocket* sock) {
   size_t rsize;
   do {
     auto buf = frame_deserializer.BeginReceive();
-    rsize = client->sock->Receive(buf.data, buf.size);
+    base::ScopedFile fd;
+    rsize = client->sock->Receive(buf.data, buf.size, &fd);
+    if (fd) {
+      PERFETTO_DCHECK(!client->received_fd);
+      client->received_fd = std::move(fd);
+    }
     if (!frame_deserializer.EndReceive(rsize))
       return OnDisconnect(client->sock.get());
   } while (rsize > 0);
@@ -118,11 +123,11 @@ void HostImpl::OnDataAvailable(UnixSocket* sock) {
 
 void HostImpl::OnReceivedFrame(ClientConnection* client,
                                const Frame& req_frame) {
-  if (req_frame.msg_case() == Frame::kMsgBindService) {
+  if (req_frame.msg_case() == Frame::kMsgBindService)
     return OnBindService(client, req_frame);
-  } else if (req_frame.msg_case() == Frame::kMsgInvokeMethod) {
+  if (req_frame.msg_case() == Frame::kMsgInvokeMethod)
     return OnInvokeMethod(client, req_frame);
-  }
+
   PERFETTO_DLOG("Received invalid RPC frame %u from client %" PRIu64,
                 req_frame.msg_case(), client->id);
   Frame reply_frame;
@@ -200,7 +205,9 @@ void HostImpl::OnInvokeMethod(ClientConnection* client,
   }
 
   service->client_info_ = ClientInfo(client->id, client->sock->peer_uid());
+  service->received_fd_ = &client->received_fd;
   method.invoker(service, *decoded_req_args, std::move(deferred_reply));
+  service->received_fd_ = nullptr;
   service->client_info_ = ClientInfo();
 }
 

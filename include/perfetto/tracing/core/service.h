@@ -32,6 +32,7 @@ namespace base {
 class TaskRunner;
 }  // namespace base
 
+class CommitDataRequest;
 class Consumer;
 class DataSourceDescriptor;
 class Producer;
@@ -74,8 +75,7 @@ class Service {
 
     // Called by the Producer to signal that some pages in the shared memory
     // buffer (shared between Service and Producer) have changed.
-    virtual void NotifySharedMemoryUpdate(
-        const std::vector<uint32_t>& changed_pages) = 0;
+    virtual void CommitData(const CommitDataRequest&) = 0;
 
     // TODO(primiano): remove this, we shouldn't be exposing the raw
     // SHM object but only the TraceWriter (below).
@@ -132,6 +132,8 @@ class Service {
   // |shared_buffer_size_hint_bytes| is an optional hint on the size of the
   // shared memory buffer. The service can ignore the hint (e.g., if the hint
   // is unreasonably large).
+  // Can return null in the unlikely event that service has too many producers
+  // connected.
   virtual std::unique_ptr<ProducerEndpoint> ConnectProducer(
       Producer*,
       uid_t uid,

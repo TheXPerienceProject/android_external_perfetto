@@ -83,7 +83,8 @@ class CpuReader {
   bool Drain(const std::array<const EventFilter*, kMaxSinks>&,
              const std::array<
                  protozero::MessageHandle<protos::pbzero::FtraceEventBundle>,
-                 kMaxSinks>&);
+                 kMaxSinks>&,
+             const std::array<FtraceMetadata*, kMaxSinks>& metadatas);
 
   template <typename T>
   static bool ReadAndAdvance(const uint8_t** ptr, const uint8_t* end, T* out) {
@@ -97,13 +98,32 @@ class CpuReader {
 
   // Caller must do the bounds check:
   // [start + offset, start + offset + sizeof(T))
+  // Returns the raw value not the varint.
   template <typename T>
-  static void ReadIntoVarInt(const uint8_t* start,
-                             size_t field_id,
-                             protozero::Message* out) {
+  static T ReadIntoVarInt(const uint8_t* start,
+                          size_t field_id,
+                          protozero::Message* out) {
     T t;
     memcpy(&t, reinterpret_cast<const void*>(start), sizeof(T));
     out->AppendVarInt<T>(field_id, t);
+    return t;
+  }
+
+  template <typename T>
+  static void ReadInode(const uint8_t* start,
+                        size_t field_id,
+                        protozero::Message* out,
+                        FtraceMetadata* metadata) {
+    T t = ReadIntoVarInt<T>(start, field_id, out);
+    metadata->inodes.push_back(t);
+  }
+
+  static void ReadPid(const uint8_t* start,
+                      size_t field_id,
+                      protozero::Message* out,
+                      FtraceMetadata* metadata) {
+    int32_t pid = ReadIntoVarInt<int32_t>(start, field_id, out);
+    metadata->AddPid(pid);
   }
 
   // Iterate through every file in the current directory and check if the inode
@@ -120,11 +140,11 @@ class CpuReader {
   // run time (e.g. field offset and size) information necessary to do this.
   // The table is initialized once at start time by the ftrace controller
   // which passes it to the CpuReader which passes it here.
-  static size_t ParsePage(size_t cpu,
-                          const uint8_t* ptr,
+  static size_t ParsePage(const uint8_t* ptr,
                           const EventFilter*,
                           protos::pbzero::FtraceEventBundle*,
-                          const ProtoTranslationTable* table);
+                          const ProtoTranslationTable* table,
+                          FtraceMetadata*);
 
   // Parse a single raw ftrace event beginning at |start| and ending at |end|
   // and write it into the provided bundle as a proto.
@@ -138,19 +158,19 @@ class CpuReader {
                          const uint8_t* end,
                          const ProtoTranslationTable* table,
                          protozero::Message* message,
-                         std::set<uint64_t>* inode_numbers);
+                         FtraceMetadata* metadata);
 
   static bool ParseField(const Field& field,
                          const uint8_t* start,
                          const uint8_t* end,
                          protozero::Message* message,
-                         std::set<uint64_t>* inode_numbers);
+                         FtraceMetadata* metadata);
 
  private:
   static void RunWorkerThread(size_t cpu,
                               int trace_fd,
                               int staging_write_fd,
-                              std::function<void()> on_data_available);
+                              const std::function<void()>& on_data_available);
 
   uint8_t* GetBuffer();
   CpuReader(const CpuReader&) = delete;

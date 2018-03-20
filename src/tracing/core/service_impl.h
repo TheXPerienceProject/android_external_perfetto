@@ -64,8 +64,7 @@ class ServiceImpl : public Service {
     void RegisterDataSource(const DataSourceDescriptor&,
                             RegisterDataSourceCallback) override;
     void UnregisterDataSource(DataSourceID) override;
-    void NotifySharedMemoryUpdate(
-        const std::vector<uint32_t>& changed_pages) override;
+    void CommitData(const CommitDataRequest&) override;
     std::unique_ptr<TraceWriter> CreateTraceWriter(BufferID) override;
     SharedMemory* shared_memory() const override;
 
@@ -123,6 +122,7 @@ class ServiceImpl : public Service {
   void RegisterDataSource(ProducerID,
                           DataSourceID,
                           const DataSourceDescriptor&);
+  void UnregisterDataSource(ProducerID, DataSourceID);
   void CopyProducerPageIntoLogBuffer(ProducerID,
                                      BufferID,
                                      const uint8_t*,
@@ -149,10 +149,18 @@ class ServiceImpl : public Service {
   ProducerEndpointImpl* GetProducer(ProducerID) const;
 
  private:
+  FRIEND_TEST(ServiceImplTest, ProducerIDWrapping);
+
   struct RegisteredDataSource {
     ProducerID producer_id;
     DataSourceID data_source_id;
     DataSourceDescriptor descriptor;
+  };
+
+  // Represents an active data source for a tracing session.
+  struct DataSourceInstance {
+    DataSourceInstanceID instance_id;
+    DataSourceID data_source_id;
   };
 
   struct TraceBuffer {
@@ -161,7 +169,7 @@ class ServiceImpl : public Service {
     TraceBuffer(TraceBuffer&&) noexcept;
     TraceBuffer& operator=(TraceBuffer&&);
 
-    bool Create(size_t size);
+    bool Create(size_t size_in_bytes);
     size_t num_pages() const { return size / kBufferPageSize; }
 
     uint8_t* get_page(size_t page) {
@@ -208,7 +216,7 @@ class ServiceImpl : public Service {
 
     // List of data source instances that have been enabled on the various
     // producers for this tracing session.
-    std::multimap<ProducerID, DataSourceInstanceID> data_source_instances;
+    std::multimap<ProducerID, DataSourceInstance> data_source_instances;
 
     // Maps a per-trace-session buffer index into the corresponding global
     // BufferID (shared namespace amongst all consumers). This vector has as
@@ -219,14 +227,20 @@ class ServiceImpl : public Service {
   ServiceImpl(const ServiceImpl&) = delete;
   ServiceImpl& operator=(const ServiceImpl&) = delete;
 
-  void CreateDataSourceInstanceForProducer(
-      const TraceConfig::DataSource& cfg_data_source,
-      ProducerEndpointImpl* producer,
-      TracingSession* tracing_session);
+  void CreateDataSourceInstance(const TraceConfig::DataSource&,
+                                const RegisteredDataSource&,
+                                TracingSession*);
+
+  // Returns the next available ProducerID that is not in |producers_|.
+  ProducerID GetNextProducerID();
 
   // Returns a pointer to the |tracing_sessions_| entry or nullptr if the
   // session doesn't exists.
   TracingSession* GetTracingSession(TracingSessionID);
+
+  // Update the memory guard rail by using the latest information from the
+  // shared memory and trace buffers.
+  void UpdateMemoryGuardrail();
 
   base::TaskRunner* const task_runner_;
   std::unique_ptr<SharedMemory::Factory> shm_factory_;
@@ -247,6 +261,8 @@ class ServiceImpl : public Service {
   std::set<ConsumerEndpointImpl*> consumers_;
   std::map<TracingSessionID, TracingSession> tracing_sessions_;
   std::map<BufferID, TraceBuffer> buffers_;
+
+  bool lockdown_mode_ = false;
 
   PERFETTO_THREAD_CHECKER(thread_checker_)
 

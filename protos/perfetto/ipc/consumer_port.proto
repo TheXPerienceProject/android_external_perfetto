@@ -17,10 +17,9 @@
 syntax = "proto2";
 option optimize_for = LITE_RUNTIME;
 
-import "perfetto/config/data_source_config.proto";
 import "perfetto/config/trace_config.proto";
 
-package perfetto;
+package perfetto.protos;
 
 // IPC interface definition for the consumer port of the tracing service.
 service ConsumerPort {

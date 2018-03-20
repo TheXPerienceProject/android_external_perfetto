@@ -167,13 +167,20 @@ bool InferFtraceType(const std::string& type_and_name,
     return true;
   }
 
-  if (StartsWith(type_and_name, "ino_t ") && size == 4) {
-    *out = kFtraceInode32;
-    return true;
+  if (StartsWith(type_and_name, "ino_t ") ||
+      StartsWith(type_and_name, "i_ino ")) {
+    if (size == 4) {
+      *out = kFtraceInode32;
+      return true;
+    } else if (size == 8) {
+      *out = kFtraceInode64;
+      return true;
+    }
   }
 
-  if (StartsWith(type_and_name, "ino_t ") && size == 8) {
-    *out = kFtraceInode64;
+  // Pids (as in 'sched_switch').
+  if (StartsWith(type_and_name, "pid_t ") && size == 4) {
+    *out = kFtracePid32;
     return true;
   }
 
@@ -222,7 +229,7 @@ std::unique_ptr<ProtoTranslationTable> ProtoTranslationTable::Create(
     std::string contents =
         ftrace_procfs->ReadEventFormat(event.group, event.name);
     FtraceEvent ftrace_event;
-    if (contents == "" || !ParseFtraceEvent(contents, &ftrace_event)) {
+    if (contents.empty() || !ParseFtraceEvent(contents, &ftrace_event)) {
       continue;
     }
 
