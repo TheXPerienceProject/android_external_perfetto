@@ -101,6 +101,9 @@ class CommitDataRequest {
 
       const std::string& data() const { return data_; }
       void set_data(const std::string& value) { data_ = value; }
+      void set_data(const void* p, size_t s) {
+        data_.assign(reinterpret_cast<const char*>(p), s);
+      }
 
      private:
       uint32_t offset_ = {};
@@ -122,6 +125,9 @@ class CommitDataRequest {
     void FromProto(const perfetto::protos::CommitDataRequest_ChunkToPatch&);
     void ToProto(perfetto::protos::CommitDataRequest_ChunkToPatch*) const;
 
+    uint32_t target_buffer() const { return target_buffer_; }
+    void set_target_buffer(uint32_t value) { target_buffer_ = value; }
+
     uint32_t writer_id() const { return writer_id_; }
     void set_writer_id(uint32_t value) { writer_id_ = value; }
 
@@ -139,6 +145,7 @@ class CommitDataRequest {
     void set_has_more_patches(bool value) { has_more_patches_ = value; }
 
    private:
+    uint32_t target_buffer_ = {};
     uint32_t writer_id_ = {};
     uint32_t chunk_id_ = {};
     std::vector<Patch> patches_;

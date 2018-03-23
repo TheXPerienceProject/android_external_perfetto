@@ -35,7 +35,7 @@ class FakeProducerEndpoint : public Service::ProducerEndpoint {
   void RegisterDataSource(const DataSourceDescriptor&,
                           RegisterDataSourceCallback) override {}
   void UnregisterDataSource(DataSourceID) override {}
-  void CommitData(const CommitDataRequest&) override {}
+  void CommitData(const CommitDataRequest&, CommitDataCallback) override {}
   SharedMemory* shared_memory() const override { return nullptr; }
   std::unique_ptr<TraceWriter> CreateTraceWriter(BufferID) override {
     return nullptr;
@@ -94,7 +94,7 @@ TEST_P(TraceWriterImplTest, SingleWriter) {
       auto chunk_state = abi->GetChunkState(page_idx, chunk_idx);
       ASSERT_TRUE(chunk_state == SharedMemoryABI::kChunkFree ||
                   chunk_state == SharedMemoryABI::kChunkComplete);
-      auto chunk = abi->TryAcquireChunkForReading(page_idx, chunk_idx, kBufId);
+      auto chunk = abi->TryAcquireChunkForReading(page_idx, chunk_idx);
       if (!chunk.is_valid())
         continue;
       packets_count += chunk.header()->packets.load().count;
@@ -105,6 +105,7 @@ TEST_P(TraceWriterImplTest, SingleWriter) {
 }
 
 // TODO(primiano): add multi-writer test.
+// TODO(primiano): add Flush() test.
 
 }  // namespace
 }  // namespace perfetto

@@ -25,6 +25,7 @@
 #include "gtest/gtest.h"
 #include "perfetto/base/build_config.h"
 #include "perfetto/base/logging.h"
+#include "perfetto/base/temp_file.h"
 #include "perfetto/base/utils.h"
 #include "src/base/test/test_task_runner.h"
 #include "src/ipc/test/test_socket.h"
@@ -99,7 +100,7 @@ TEST_F(UnixSocketTest, ConnectionImmediatelyDroppedByServer) {
       .WillOnce(
           Invoke([this, srv_did_shutdown](UnixSocket*, UnixSocket* new_conn) {
             EXPECT_CALL(event_listener_, OnDisconnect(new_conn));
-            new_conn->Shutdown();
+            new_conn->Shutdown(true);
             srv_did_shutdown();
           }));
 
@@ -161,7 +162,7 @@ TEST_F(UnixSocketTest, ClientAndServerExchangeData) {
   auto cli_disconnected = task_runner_.CreateCheckpoint("cli_disconnected");
   EXPECT_CALL(event_listener_, OnDisconnect(cli.get()))
       .WillOnce(InvokeWithoutArgs(cli_disconnected));
-  cli->Shutdown();
+  cli->Shutdown(true);
   char msg[4];
   ASSERT_EQ(0u, cli->Receive(&msg, sizeof(msg)));
   ASSERT_EQ("", cli->ReceiveString());
@@ -169,7 +170,7 @@ TEST_F(UnixSocketTest, ClientAndServerExchangeData) {
   ASSERT_EQ("", srv_conn->ReceiveString());
   ASSERT_FALSE(cli->Send("foo"));
   ASSERT_FALSE(srv_conn->Send("bar"));
-  srv->Shutdown();
+  srv->Shutdown(true);
   task_runner_.RunUntilCheckpoint("cli_disconnected");
   task_runner_.RunUntilCheckpoint("srv_disconnected");
 }
@@ -253,9 +254,8 @@ TEST_F(UnixSocketTest, SharedMemory) {
 
   if (pid == 0) {
     // Child process.
-    FILE* tmp = tmpfile();
-    ASSERT_NE(nullptr, tmp);
-    int tmp_fd = fileno(tmp);
+    base::TempFile scoped_tmp = base::TempFile::CreateUnlinked();
+    int tmp_fd = scoped_tmp.fd();
     ASSERT_FALSE(ftruncate(tmp_fd, kTmpSize));
     char* mem = reinterpret_cast<char*>(
         mmap(nullptr, kTmpSize, PROT_READ | PROT_WRITE, MAP_SHARED, tmp_fd, 0));

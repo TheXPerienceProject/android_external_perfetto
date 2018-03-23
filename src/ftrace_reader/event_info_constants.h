@@ -49,6 +49,7 @@ enum FtraceFieldType {
   kFtraceUint16,
   kFtraceUint32,
   kFtraceUint64,
+  kFtraceInt8,
   kFtraceInt16,
   kFtraceInt32,
   kFtraceInt64,
@@ -59,6 +60,7 @@ enum FtraceFieldType {
   kFtraceInode32,
   kFtraceInode64,
   kFtracePid32,
+  kFtraceDevId32,
 };
 
 // Joint enum of FtraceFieldType (left) and ProtoFieldType (right).
@@ -70,6 +72,7 @@ enum TranslationStrategy {
   kUint32ToUint32,
   kUint32ToUint64,
   kUint64ToUint64,
+  kInt8ToInt32,
   kInt16ToInt32,
   kInt32ToInt32,
   kInt32ToInt64,
@@ -81,6 +84,7 @@ enum TranslationStrategy {
   kInode32ToUint64,
   kInode64ToUint64,
   kPid32ToInt32,
+  kDevId32ToUint32,
 };
 
 inline const char* ToString(ProtoFieldType v) {
@@ -131,6 +135,8 @@ inline const char* ToString(FtraceFieldType v) {
       return "uint32";
     case kFtraceUint64:
       return "uint64";
+    case kFtraceInt8:
+      return "int8";
     case kFtraceInt16:
       return "int16";
     case kFtraceInt32:
@@ -151,6 +157,8 @@ inline const char* ToString(FtraceFieldType v) {
       return "inode64";
     case kFtracePid32:
       return "pid32";
+    case kFtraceDevId32:
+      return "devid32";
   }
   // For gcc:
   PERFETTO_CHECK(false);

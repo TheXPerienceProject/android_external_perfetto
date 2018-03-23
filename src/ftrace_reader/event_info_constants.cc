@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "event_info_constants.h"
+#include "src/ftrace_reader/event_info_constants.h"
 
 namespace perfetto {
 
@@ -43,6 +43,8 @@ bool SetTranslationStrategy(FtraceFieldType ftrace,
     *out = kInode64ToUint64;
   } else if (ftrace == kFtracePid32 && proto == kProtoInt32) {
     *out = kPid32ToInt32;
+  } else if (ftrace == kFtraceDevId32 && proto == kProtoUint32) {
+    *out = kDevId32ToUint32;
   } else if (ftrace == kFtraceUint8 && proto == kProtoUint32) {
     *out = kUint8ToUint32;
   } else if (ftrace == kFtraceUint16 && proto == kProtoUint32) {
@@ -53,6 +55,8 @@ bool SetTranslationStrategy(FtraceFieldType ftrace,
     *out = kUint32ToUint64;
   } else if (ftrace == kFtraceUint64 && proto == kProtoUint64) {
     *out = kUint64ToUint64;
+  } else if (ftrace == kFtraceInt8 && proto == kProtoInt32) {
+    *out = kInt8ToInt32;
   } else if (ftrace == kFtraceInt16 && proto == kProtoInt32) {
     *out = kInt16ToInt32;
   } else if (ftrace == kFtraceInt32 && proto == kProtoInt32) {
