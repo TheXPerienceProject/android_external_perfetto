@@ -43,11 +43,11 @@ class FakeConsumer : public Consumer {
   void Connect(const char* socket_name);
   void Disconnect();
   void ReadTraceData();
-  void BusyWaitReadBuffers();
 
   // Consumer implementation.
   void OnConnect() override;
   void OnDisconnect() override;
+  void OnTracingStop() override;
   void OnTraceData(std::vector<TracePacket> packets, bool has_more) override;
 
  private:

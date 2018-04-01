@@ -68,18 +68,10 @@ void FakeConsumer::OnDisconnect() {
   FAIL() << "Consumer unexpectedly disconnected from the service";
 }
 
+void FakeConsumer::OnTracingStop() {}
+
 void FakeConsumer::OnTraceData(std::vector<TracePacket> data, bool has_more) {
   packet_callback_(std::move(data), has_more);
-}
-
-void FakeConsumer::BusyWaitReadBuffers() {
-  task_runner_->PostDelayedTask(
-      std::bind([this]() {
-        endpoint_->ReadBuffers();
-        task_runner_->PostDelayedTask(
-            std::bind([this]() { BusyWaitReadBuffers(); }), 1);
-      }),
-      1);
 }
 
 }  // namespace perfetto
