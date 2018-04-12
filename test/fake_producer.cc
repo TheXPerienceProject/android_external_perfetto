@@ -118,8 +118,15 @@ void FakeProducer::ProduceEventBatch(std::function<void()> callback) {
   });
 }
 
-void FakeProducer::OnTracingStart() {}
+void FakeProducer::OnTracingSetup() {}
 
-void FakeProducer::OnTracingStop() {}
+void FakeProducer::Flush(FlushRequestID flush_request_id,
+                         const DataSourceInstanceID*,
+                         size_t num_data_sources) {
+  PERFETTO_DCHECK(num_data_sources > 0);
+  if (trace_writer_)
+    trace_writer_->Flush();
+  endpoint_->NotifyFlushComplete(flush_request_id);
+}
 
 }  // namespace perfetto

@@ -98,9 +98,9 @@ void CreateStaticDeviceToInodeMap(
   scanner.Scan();
 }
 
-void FillInodeEntry(InodeFileMap* destination,
-                    Inode inode_number,
-                    const InodeMapValue& inode_map_value) {
+void InodeFileDataSource::FillInodeEntry(InodeFileMap* destination,
+                                         Inode inode_number,
+                                         const InodeMapValue& inode_map_value) {
   auto* entry = destination->add_entries();
   entry->set_inode_number(inode_number);
   entry->set_type(inode_map_value.type());
@@ -172,6 +172,11 @@ void InodeFileDataSource::AddInodesFromLRUCache(
   }
   if (cache_found_count > 0)
     PERFETTO_DLOG("%" PRIu64 " inodes found in cache", cache_found_count);
+}
+
+void InodeFileDataSource::Flush() {
+  ResetTracePacket();
+  writer_->Flush();
 }
 
 void InodeFileDataSource::OnInodes(
@@ -296,13 +301,17 @@ bool InodeFileDataSource::OnInodeFound(
   return !missing_inodes_.empty();
 }
 
-void InodeFileDataSource::OnInodeScanDone() {
-  // Finalize the accumulated trace packets.
+void InodeFileDataSource::ResetTracePacket() {
   current_block_device_id_ = 0;
   current_file_map_ = nullptr;
   if (has_current_trace_packet_)
     current_trace_packet_->Finalize();
   has_current_trace_packet_ = false;
+}
+
+void InodeFileDataSource::OnInodeScanDone() {
+  // Finalize the accumulated trace packets.
+  ResetTracePacket();
   file_scanner_.reset();
   if (next_missing_inodes_.empty()) {
     scan_running_ = false;
@@ -354,17 +363,17 @@ void InodeFileDataSource::FindMissingInodes() {
   file_scanner_->Scan(task_runner_);
 }
 
-uint64_t InodeFileDataSource::GetScanIntervalMs() {
+uint64_t InodeFileDataSource::GetScanIntervalMs() const {
   return OrDefault(source_config_.inode_file_config().scan_interval_ms(),
                    kScanIntervalMs);
 }
 
-uint64_t InodeFileDataSource::GetScanDelayMs() {
+uint64_t InodeFileDataSource::GetScanDelayMs() const {
   return OrDefault(source_config_.inode_file_config().scan_delay_ms(),
                    kScanDelayMs);
 }
 
-uint64_t InodeFileDataSource::GetScanBatchSize() {
+uint64_t InodeFileDataSource::GetScanBatchSize() const {
   return OrDefault(source_config_.inode_file_config().scan_batch_size(),
                    kScanBatchSize);
 }

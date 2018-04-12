@@ -223,13 +223,13 @@ void ProbesProducer::CreateProcessStatsDataSourceInstance(
   auto trace_writer = endpoint_->CreateTraceWriter(
       static_cast<BufferID>(config.target_buffer()));
   auto source = std::unique_ptr<ProcessStatsDataSource>(
-      new ProcessStatsDataSource(session_id, std::move(trace_writer)));
+      new ProcessStatsDataSource(session_id, std::move(trace_writer), config));
   auto it_and_inserted = process_stats_sources_.emplace(id, std::move(source));
   PERFETTO_DCHECK(it_and_inserted.second);
-  if (std::find(config.process_stats_config().quirks().begin(),
-                config.process_stats_config().quirks().end(),
-                ProcessStatsConfig::DISABLE_INITIAL_DUMP) !=
-      config.process_stats_config().quirks().end()) {
+  const auto& quirks =
+      it_and_inserted.first->second->config().process_stats_config().quirks();
+  if (std::find(quirks.begin(), quirks.end(),
+                ProcessStatsConfig::DISABLE_INITIAL_DUMP) != quirks.end()) {
     PERFETTO_DLOG("Initial process tree dump is disabled.");
     return;
   }
@@ -249,8 +249,31 @@ void ProbesProducer::TearDownDataSourceInstance(DataSourceInstanceID id) {
   watchdogs_.erase(id);
 }
 
-void ProbesProducer::OnTracingStart() {}
-void ProbesProducer::OnTracingStop() {}
+void ProbesProducer::OnTracingSetup() {}
+
+void ProbesProducer::Flush(FlushRequestID flush_request_id,
+                           const DataSourceInstanceID* data_source_ids,
+                           size_t num_data_sources) {
+  for (size_t i = 0; i < num_data_sources; i++) {
+    DataSourceInstanceID ds_id = data_source_ids[i];
+    {
+      auto it = process_stats_sources_.find(ds_id);
+      if (it != process_stats_sources_.end())
+        it->second->Flush();
+    }
+    {
+      auto it = file_map_sources_.find(ds_id);
+      if (it != file_map_sources_.end())
+        it->second->Flush();
+    }
+    {
+      auto it = delegates_.find(ds_id);
+      if (it != delegates_.end())
+        it->second->Flush();
+    }
+  }
+  endpoint_->NotifyFlushComplete(flush_request_id);
+}
 
 void ProbesProducer::ConnectWithRetries(const char* socket_name,
                                         base::TaskRunner* task_runner) {
@@ -290,6 +313,15 @@ ProbesProducer::SinkDelegate::SinkDelegate(TracingSessionID id,
 
 ProbesProducer::SinkDelegate::~SinkDelegate() = default;
 
+void ProbesProducer::SinkDelegate::Flush() {
+  // TODO(primiano): this still doesn't flush data from the kernel ftrace
+  // buffers (see b/73886018). We should do that and delay the
+  // NotifyFlushComplete() until the ftrace data has been drained from the
+  // kernel ftrace buffer and written in the SMB.
+  if (writer_ && (!trace_packet_ || trace_packet_->is_finalized()))
+    writer_->Flush();
+}
+
 ProbesProducer::FtraceBundleHandle
 ProbesProducer::SinkDelegate::GetBundleForCpu(size_t) {
   trace_packet_ = writer_->NewTracePacket();
@@ -302,21 +334,25 @@ void ProbesProducer::SinkDelegate::OnBundleComplete(
     const FtraceMetadata& metadata) {
   trace_packet_->Finalize();
 
-  if (ps_source_ && !metadata.pids.empty()) {
-    const auto& pids = metadata.pids;
-    auto weak_ps_source = ps_source_;
-    task_runner_->PostTask([weak_ps_source, pids] {
-      if (weak_ps_source)
-        weak_ps_source->OnPids(pids);
-    });
-  }
-
   if (file_source_ && !metadata.inode_and_device.empty()) {
     auto inodes = metadata.inode_and_device;
     auto weak_file_source = file_source_;
     task_runner_->PostTask([weak_file_source, inodes] {
       if (weak_file_source)
         weak_file_source->OnInodes(inodes);
+    });
+  }
+  if (ps_source_ && !metadata.pids.empty()) {
+    const auto& quirks = ps_source_->config().process_stats_config().quirks();
+    if (std::find(quirks.begin(), quirks.end(),
+                  ProcessStatsConfig::DISABLE_ON_DEMAND) != quirks.end()) {
+      return;
+    }
+    const auto& pids = metadata.pids;
+    auto weak_ps_source = ps_source_;
+    task_runner_->PostTask([weak_ps_source, pids] {
+      if (weak_ps_source)
+        weak_ps_source->OnPids(pids);
     });
   }
 }

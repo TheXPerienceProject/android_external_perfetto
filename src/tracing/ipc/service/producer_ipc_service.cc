@@ -223,7 +223,7 @@ void ProducerIPCService::RemoteProducer::TearDownDataSourceInstance(
   async_producer_commands.Resolve(std::move(cmd));
 }
 
-void ProducerIPCService::RemoteProducer::OnTracingStart() {
+void ProducerIPCService::RemoteProducer::OnTracingSetup() {
   if (!async_producer_commands.IsBound()) {
     PERFETTO_DLOG(
         "The Service tried to allocate the shared memory but the remote "
@@ -236,13 +236,27 @@ void ProducerIPCService::RemoteProducer::OnTracingStart() {
   auto cmd = ipc::AsyncResult<protos::GetAsyncCommandResponse>::Create();
   cmd.set_has_more(true);
   cmd.set_fd(shm_fd);
-  cmd->mutable_on_tracing_start()->set_shared_buffer_page_size_kb(
+  cmd->mutable_setup_tracing()->set_shared_buffer_page_size_kb(
       service_endpoint->shared_buffer_page_size_kb());
   async_producer_commands.Resolve(std::move(cmd));
 }
 
-void ProducerIPCService::RemoteProducer::OnTracingStop() {
-  // TODO(taylori): Implement.
+void ProducerIPCService::RemoteProducer::Flush(
+    FlushRequestID flush_request_id,
+    const DataSourceInstanceID* data_source_ids,
+    size_t num_data_sources) {
+  if (!async_producer_commands.IsBound()) {
+    PERFETTO_DLOG(
+        "The Service tried to request a flush but the remote Producer has not "
+        "yet initialized the connection");
+    return;
+  }
+  auto cmd = ipc::AsyncResult<protos::GetAsyncCommandResponse>::Create();
+  cmd.set_has_more(true);
+  for (size_t i = 0; i < num_data_sources; i++)
+    cmd->mutable_flush()->add_data_source_ids(data_source_ids[i]);
+  cmd->mutable_flush()->set_request_id(flush_request_id);
+  async_producer_commands.Resolve(std::move(cmd));
 }
 
 }  // namespace perfetto

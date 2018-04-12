@@ -31,7 +31,8 @@ service ConsumerPort {
   // rpc CreateBuffers(CreateBuffersRequest) returns (CreateBuffersResponse) {}
 
   // Enables tracing for one or more data sources. At least one buffer must have
-  // been previously created.
+  // been previously created. The EnableTracingResponse is sent when tracing is
+  // disabled (either explicitly or because of the |duration_ms| expired).
   rpc EnableTracing(EnableTracingRequest) returns (EnableTracingResponse) {}
 
   // Disables tracing for one or more data sources.
@@ -48,6 +49,15 @@ service ConsumerPort {
   // implicitly if the Consumer disconnects.
   rpc FreeBuffers(FreeBuffersRequest) returns (FreeBuffersResponse) {}
 
+  // Asks the service to request to all data sources involved in the tracing
+  // session to commit their data into the trace buffer. The FlushResponse is
+  // sent only:
+  // - After the data has been committed (in which case FlushResponse succeeds)
+  // or
+  // - After FlushRequest.timeout_ms milliseconds (in which case the
+  //   FlushResponse is rejected and fails).
+  rpc Flush(FlushRequest) returns (FlushResponse) {}
+
   // TODO rpc ListDataSources(), for the UI.
 }
 
@@ -57,7 +67,7 @@ message EnableTracingRequest {
 }
 
 message EnableTracingResponse {
-  oneof state { bool stopped = 1; }
+  oneof state { bool disabled = 1; }
 }
 
 // Arguments for rpc DisableTracing().
@@ -101,3 +111,10 @@ message FreeBuffersRequest {
 }
 
 message FreeBuffersResponse {}
+
+// Arguments for rpc Flush().
+message FlushRequest {
+  optional uint32 timeout_ms = 1;
+}
+
+message FlushResponse {}
