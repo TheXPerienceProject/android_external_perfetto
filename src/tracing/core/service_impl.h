@@ -46,13 +46,16 @@ class DataSourceConfig;
 class Producer;
 class SharedMemory;
 class SharedMemoryArbiterImpl;
-class TraceBuffez;
+class TraceBuffer;
 class TraceConfig;
 class TracePacket;
 
 // The tracing service business logic.
 class ServiceImpl : public Service {
  public:
+  static constexpr size_t kDefaultShmSize = 256 * 1024ul;
+  static constexpr size_t kMaxShmSize = 32 * 1024 * 1024ul;
+
   // The implementation behind the service endpoint exposed to each producer.
   class ProducerEndpointImpl : public Service::ProducerEndpoint {
    public:
@@ -60,25 +63,32 @@ class ServiceImpl : public Service {
                          uid_t uid,
                          ServiceImpl*,
                          base::TaskRunner*,
-                         Producer*);
+                         Producer*,
+                         const std::string& producer_name);
     ~ProducerEndpointImpl() override;
 
     // Service::ProducerEndpoint implementation.
-    void RegisterDataSource(const DataSourceDescriptor&,
-                            RegisterDataSourceCallback) override;
-    void UnregisterDataSource(DataSourceID) override;
+    void RegisterDataSource(const DataSourceDescriptor&) override;
+    void UnregisterDataSource(const std::string& name) override;
     void CommitData(const CommitDataRequest&, CommitDataCallback) override;
     void SetSharedMemory(std::unique_ptr<SharedMemory>);
 
     std::unique_ptr<TraceWriter> CreateTraceWriter(BufferID) override;
+    void OnTracingSetup();
+    void Flush(FlushRequestID, const std::vector<DataSourceInstanceID>&);
+    void CreateDataSourceInstance(DataSourceInstanceID,
+                                  const DataSourceConfig&);
+    void NotifyFlushComplete(FlushRequestID) override;
+    void TearDownDataSource(DataSourceInstanceID);
     SharedMemory* shared_memory() const override;
     size_t shared_buffer_page_size_kb() const override;
 
    private:
     friend class ServiceImpl;
-    FRIEND_TEST(ServiceImplTest, RegisterAndUnregister);
+    friend class ServiceImplTest;
     ProducerEndpointImpl(const ProducerEndpointImpl&) = delete;
     ProducerEndpointImpl& operator=(const ProducerEndpointImpl&) = delete;
+    SharedMemoryArbiterImpl* GetOrCreateShmemArbiter();
 
     ProducerID const id_;
     const uid_t uid_;
@@ -88,13 +98,13 @@ class ServiceImpl : public Service {
     std::unique_ptr<SharedMemory> shared_memory_;
     size_t shared_buffer_page_size_kb_ = 0;
     SharedMemoryABI shmem_abi_;
-    size_t shared_memory_size_hint_bytes_ = 0;
-    DataSourceID last_data_source_id_ = 0;
+    size_t shmem_size_hint_bytes_ = 0;
+    const std::string name_;
 
     // This is used only in in-process configurations (mostly tests).
     std::unique_ptr<SharedMemoryArbiterImpl> inproc_shmem_arbiter_;
-
     PERFETTO_THREAD_CHECKER(thread_checker_)
+    base::WeakPtrFactory<ProducerEndpointImpl> weak_ptr_factory_;  // Keep last.
   };
 
   // The implementation behind the service endpoint exposed to each consumer.
@@ -103,7 +113,7 @@ class ServiceImpl : public Service {
     ConsumerEndpointImpl(ServiceImpl*, base::TaskRunner*, Consumer*);
     ~ConsumerEndpointImpl() override;
 
-    void NotifyOnTracingStop();
+    void NotifyOnTracingDisabled();
     base::WeakPtr<ConsumerEndpointImpl> GetWeakPtr();
 
     // Service::ConsumerEndpoint implementation.
@@ -111,6 +121,7 @@ class ServiceImpl : public Service {
     void DisableTracing() override;
     void ReadBuffers() override;
     void FreeBuffers() override;
+    void Flush(int timeout_ms, FlushCallback) override;
 
    private:
     friend class ServiceImpl;
@@ -121,10 +132,8 @@ class ServiceImpl : public Service {
     ServiceImpl* const service_;
     Consumer* const consumer_;
     TracingSessionID tracing_session_id_ = 0;
-
     PERFETTO_THREAD_CHECKER(thread_checker_)
-
-    base::WeakPtrFactory<ConsumerEndpointImpl> weak_ptr_factory_;
+    base::WeakPtrFactory<ConsumerEndpointImpl> weak_ptr_factory_;  // Keep last.
   };
 
   explicit ServiceImpl(std::unique_ptr<SharedMemory::Factory>,
@@ -133,10 +142,8 @@ class ServiceImpl : public Service {
 
   // Called by ProducerEndpointImpl.
   void DisconnectProducer(ProducerID);
-  void RegisterDataSource(ProducerID,
-                          DataSourceID,
-                          const DataSourceDescriptor&);
-  void UnregisterDataSource(ProducerID, DataSourceID);
+  void RegisterDataSource(ProducerID, const DataSourceDescriptor&);
+  void UnregisterDataSource(ProducerID, const std::string& name);
   void CopyProducerPageIntoLogBuffer(ProducerID,
                                      uid_t,
                                      WriterID,
@@ -148,6 +155,7 @@ class ServiceImpl : public Service {
                                      size_t size);
   void ApplyChunkPatches(ProducerID,
                          const std::vector<CommitDataRequest::ChunkToPatch>&);
+  void NotifyFlushDoneForProducer(ProducerID, FlushRequestID);
 
   // Called by ConsumerEndpointImpl.
   void DisconnectConsumer(ConsumerEndpointImpl*);
@@ -155,6 +163,10 @@ class ServiceImpl : public Service {
                      const TraceConfig&,
                      base::ScopedFile);
   void DisableTracing(TracingSessionID);
+  void Flush(TracingSessionID tsid,
+             int timeout_ms,
+             ConsumerEndpoint::FlushCallback);
+  void FlushAndDisableTracing(TracingSessionID);
   void ReadBuffers(TracingSessionID, ConsumerEndpointImpl*);
   void FreeBuffers(TracingSessionID);
 
@@ -162,6 +174,7 @@ class ServiceImpl : public Service {
   std::unique_ptr<Service::ProducerEndpoint> ConnectProducer(
       Producer*,
       uid_t uid,
+      const std::string& producer_name,
       size_t shared_memory_size_hint_bytes = 0) override;
 
   std::unique_ptr<Service::ConsumerEndpoint> ConnectConsumer(
@@ -172,18 +185,23 @@ class ServiceImpl : public Service {
   ProducerEndpointImpl* GetProducer(ProducerID) const;
 
  private:
-  FRIEND_TEST(ServiceImplTest, ProducerIDWrapping);
+  friend class ServiceImplTest;
 
   struct RegisteredDataSource {
     ProducerID producer_id;
-    DataSourceID data_source_id;
     DataSourceDescriptor descriptor;
   };
 
   // Represents an active data source for a tracing session.
   struct DataSourceInstance {
     DataSourceInstanceID instance_id;
-    DataSourceID data_source_id;
+    std::string data_source_name;
+  };
+
+  struct PendingFlush {
+    std::set<ProducerID> producers;
+    ConsumerEndpoint::FlushCallback callback;
+    explicit PendingFlush(decltype(callback) cb) : callback(std::move(cb)) {}
   };
 
   // Holds the state of a tracing session. A tracing session is uniquely bound
@@ -193,16 +211,10 @@ class ServiceImpl : public Service {
 
     size_t num_buffers() const { return buffers_index.size(); }
 
-    // Retrieves the page size from the trace config.
-    size_t GetDesiredPageSizeKb();
-
-    // Retrieves the SHM size from the trace config.
-    size_t GetDesiredShmSizeKb();
-
-    int next_write_period_ms() const {
-      PERFETTO_DCHECK(write_period_ms);
-      // TODO(primiano): this will drift. Synchronize % period so it aligns.
-      return write_period_ms;
+    int delay_to_next_write_period_ms() const {
+      PERFETTO_DCHECK(write_period_ms > 0);
+      return write_period_ms -
+             (base::GetWallTimeMs().count() % write_period_ms);
     }
 
     // The consumer that started the session.
@@ -215,6 +227,10 @@ class ServiceImpl : public Service {
     // List of data source instances that have been enabled on the various
     // producers for this tracing session.
     std::multimap<ProducerID, DataSourceInstance> data_source_instances;
+
+    // For each Flush(N) request, keeps track of the set of producers for which
+    // we are still awaiting a NotifyFlushComplete(N) ack.
+    std::map<FlushRequestID, PendingFlush> pending_flushes;
 
     // Maps a per-trace-session buffer index into the corresponding global
     // BufferID (shared namespace amongst all consumers). This vector has as
@@ -243,6 +259,7 @@ class ServiceImpl : public Service {
   ServiceImpl& operator=(const ServiceImpl&) = delete;
 
   void CreateDataSourceInstance(const TraceConfig::DataSource&,
+                                const TraceConfig::ProducerConfig&,
                                 const RegisteredDataSource&,
                                 TracingSession*);
 
@@ -259,29 +276,25 @@ class ServiceImpl : public Service {
 
   void MaybeSnapshotClocks(TracingSession*, std::vector<TracePacket>*);
   void MaybeEmitTraceConfig(TracingSession*, std::vector<TracePacket>*);
-
-  TraceBuffez* GetBufferByID(BufferID);
+  void OnFlushTimeout(TracingSessionID, FlushRequestID);
+  TraceBuffer* GetBufferByID(BufferID);
 
   base::TaskRunner* const task_runner_;
   std::unique_ptr<SharedMemory::Factory> shm_factory_;
   ProducerID last_producer_id_ = 0;
   DataSourceInstanceID last_data_source_instance_id_ = 0;
   TracingSessionID last_tracing_session_id_ = 0;
-  size_t shared_memory_size_hint_bytes_ = 0;
+  FlushRequestID last_flush_request_id_ = 0;
 
   // Buffer IDs are global across all consumers (because a Producer can produce
   // data for more than one trace session, hence more than one consumer).
   IdAllocator<BufferID> buffer_ids_;
 
   std::multimap<std::string /*name*/, RegisteredDataSource> data_sources_;
-
-  // TODO(primiano): There doesn't seem to be any good reason why |producers_|
-  // is a map indexed by ID and not just a set<ProducerEndpointImpl*>.
   std::map<ProducerID, ProducerEndpointImpl*> producers_;
-
   std::set<ConsumerEndpointImpl*> consumers_;
   std::map<TracingSessionID, TracingSession> tracing_sessions_;
-  std::map<BufferID, std::unique_ptr<TraceBuffez>> buffers_;
+  std::map<BufferID, std::unique_ptr<TraceBuffer>> buffers_;
 
   bool lockdown_mode_ = false;
 

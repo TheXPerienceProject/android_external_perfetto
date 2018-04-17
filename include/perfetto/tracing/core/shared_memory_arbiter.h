@@ -46,10 +46,13 @@ class PERFETTO_EXPORT SharedMemoryArbiter {
   // Creates a new TraceWriter and assigns it a new WriterID. The WriterID is
   // written in each chunk header owned by a given TraceWriter and is used by
   // the Service to reconstruct TracePackets written by the same TraceWriter.
-  // Returns nullptr if all WriterID slots are exhausted.
-  // TODO(primiano): instead of nullptr this should return a NoopWriter.
+  // Returns null impl of TraceWriter if all WriterID slots are exhausted.
   virtual std::unique_ptr<TraceWriter> CreateTraceWriter(
       BufferID target_buffer) = 0;
+
+  // Notifies the service that all data for the given FlushRequestID has been
+  // committed in the shared memory buffer.
+  virtual void NotifyFlushComplete(FlushRequestID) = 0;
 
   // Implemented in src/core/shared_memory_arbiter_impl.cc .
   static std::unique_ptr<SharedMemoryArbiter> CreateInstance(

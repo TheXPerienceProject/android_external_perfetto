@@ -26,29 +26,27 @@ group("all") {
   testonly = true  # allow to build also test targets
   deps = [
     ":perfetto_unittests",
-    "src/ipc/protoc_plugin:ipc_plugin($host_toolchain)",
     "src/protozero/protoc_plugin($host_toolchain)",
-    "tools/proto_to_cpp",
   ]
-  if (is_linux || is_android) {
-    deps += [ "tools/ftrace_proto_gen:ftrace_proto_gen" ]
-  }
   if (!build_with_chromium) {
     deps += [
+      ":perfetto",
+      ":perfetto_benchmarks",
+      ":perfetto_integrationtests",
+      ":traced",
+      ":traced_probes",
       "protos/perfetto/config:merged_config",  # For syntax-checking the proto.
+      "src/ipc/protoc_plugin:ipc_plugin($host_toolchain)",
       "test/configs",
       "tools:protoc_helper",
-      "tools/trace_to_text",
+      "tools/ftrace_proto_gen:ftrace_proto_gen",
+      "tools/proto_to_cpp",
     ]
+    if (!build_with_android) {
+      deps += [ "tools/trace_to_text" ]
+    }
     if (is_linux || is_android) {
-      deps += [
-        ":perfetto",
-        ":perfetto_benchmarks",
-        ":perfetto_integrationtests",
-        ":traced",
-        ":traced_probes",
-        "tools/skippy",
-      ]
+      deps += [ "tools/skippy" ]
     }
   }
 }
@@ -59,25 +57,23 @@ executable("perfetto_unittests") {
     "gn:default_deps",
     "gn:gtest_main",
     "src/base:unittests",
-    "src/ipc:unittests",
-    "src/perfetto_cmd:unittests",
     "src/protozero:unittests",
-    "src/traced/probes/filesystem:unittests",
     "src/tracing:unittests",
   ]
-  if (is_linux || is_android) {
+  if (!build_with_chromium) {
     deps += [
       "src/ftrace_reader:unittests",
+      "src/ipc:unittests",
+      "src/perfetto_cmd:unittests",
       "src/traced/probes:unittests",
+      "src/traced/probes/filesystem:unittests",
       "tools/ftrace_proto_gen:unittests",
+      "tools/sanitizers_unittests",
     ]
-  }
-  if (!build_with_chromium) {
-    deps += [ "tools/sanitizers_unittests" ]
   }
 }
 
-if (!build_with_chromium && (is_linux || is_android)) {
+if (!build_with_chromium) {
   executable("perfetto_benchmarks") {
     testonly = true
     deps = [
@@ -164,13 +160,23 @@ if (!build_with_chromium && (is_linux || is_android)) {
     }
   }
 
-  # This target exports perfetto trace protos in the Android build system,
-  # allowing both host and device targets to implement custom parsers based on
-  # our protos.
-  static_library("perfetto_trace_protos") {
-    deps = [
-      "protos/perfetto/trace:lite",
-    ]
+  if (build_with_android) {
+    executable("trace_to_text") {
+      testonly = true
+      deps = [
+        "gn:default_deps",
+        "tools/trace_to_text:lib",
+      ]
+    }
+
+    # This target exports perfetto trace protos in the Android build system,
+    # allowing both host and device targets to implement custom parsers based on
+    # our protos.
+    static_library("perfetto_trace_protos") {
+      deps = [
+        "protos/perfetto/trace:lite",
+      ]
+    }
   }
 }
 

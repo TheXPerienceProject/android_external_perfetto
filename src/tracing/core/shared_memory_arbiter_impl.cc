@@ -20,6 +20,7 @@
 #include "perfetto/base/task_runner.h"
 #include "perfetto/tracing/core/commit_data_request.h"
 #include "perfetto/tracing/core/shared_memory.h"
+#include "src/tracing/core/null_trace_writer.h"
 #include "src/tracing/core/trace_writer_impl.h"
 
 #include <limits>
@@ -214,7 +215,6 @@ void SharedMemoryArbiterImpl::FlushPendingCommitDataRequests(
   PERFETTO_DCHECK_THREAD(thread_checker_);
 
   std::unique_ptr<CommitDataRequest> req;
-  std::vector<uint32_t> pages_to_notify;
   {
     std::lock_guard<std::mutex> scoped_lock(lock_);
     req = std::move(commit_data_req_);
@@ -240,8 +240,35 @@ std::unique_ptr<TraceWriter> SharedMemoryArbiterImpl::CreateTraceWriter(
     std::lock_guard<std::mutex> scoped_lock(lock_);
     id = active_writer_ids_.Allocate();
   }
+  if (!id)
+    return std::unique_ptr<TraceWriter>(new NullTraceWriter());
   return std::unique_ptr<TraceWriter>(
-      id ? new TraceWriterImpl(this, id, target_buffer) : nullptr);
+      new TraceWriterImpl(this, id, target_buffer));
+}
+
+void SharedMemoryArbiterImpl::NotifyFlushComplete(FlushRequestID req_id) {
+  bool should_post_commit_task = false;
+  {
+    std::lock_guard<std::mutex> scoped_lock(lock_);
+    // If a commit_data_req_ exists it means that somebody else already posted a
+    // FlushPendingCommitDataRequests() task.
+    if (!commit_data_req_) {
+      commit_data_req_.reset(new CommitDataRequest());
+      should_post_commit_task = true;
+    } else {
+      // If there is another request queued and that also contains is a reply
+      // to a flush request, reply with the highest id.
+      req_id = std::max(req_id, commit_data_req_->flush_request_id());
+    }
+    commit_data_req_->set_flush_request_id(req_id);
+  }
+  if (should_post_commit_task) {
+    auto weak_this = weak_ptr_factory_.GetWeakPtr();
+    task_runner_->PostTask([weak_this] {
+      if (weak_this)
+        weak_this->FlushPendingCommitDataRequests();
+    });
+  }
 }
 
 void SharedMemoryArbiterImpl::ReleaseWriterID(WriterID id) {

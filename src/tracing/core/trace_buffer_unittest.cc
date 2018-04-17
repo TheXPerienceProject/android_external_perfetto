@@ -39,9 +39,9 @@ using ::testing::IsEmpty;
 
 class TraceBufferTest : public testing::Test {
  public:
-  using SequenceIterator = TraceBuffez::SequenceIterator;
-  using ChunkMetaKey = TraceBuffez::ChunkMeta::Key;
-  using ChunkRecord = TraceBuffez::ChunkRecord;
+  using SequenceIterator = TraceBuffer::SequenceIterator;
+  using ChunkMetaKey = TraceBuffer::ChunkMeta::Key;
+  using ChunkRecord = TraceBuffer::ChunkRecord;
 
   static constexpr uint8_t kContFromPrevChunk =
       SharedMemoryABI::ChunkHeader::kFirstPacketContinuesFromPrevChunk;
@@ -55,14 +55,14 @@ class TraceBufferTest : public testing::Test {
   }
 
   void ResetBuffer(size_t size_) {
-    trace_buffer_ = TraceBuffez::Create(size_);
+    trace_buffer_ = TraceBuffer::Create(size_);
     ASSERT_TRUE(trace_buffer_);
   }
 
   bool TryPatchChunkContents(ProducerID p,
                              WriterID w,
                              ChunkID c,
-                             std::vector<TraceBuffez::Patch> patches,
+                             std::vector<TraceBuffer::Patch> patches,
                              bool other_patches_pending = false) {
     return trace_buffer_->TryPatchChunkContents(
         p, w, c, patches.data(), patches.size(), other_patches_pending);
@@ -109,7 +109,7 @@ class TraceBufferTest : public testing::Test {
   }
 
   SequenceIterator GetReadIterForSequence(ProducerID p, WriterID w) {
-    TraceBuffez::ChunkMeta::Key key(p, w, 0);
+    TraceBuffer::ChunkMeta::Key key(p, w, 0);
     return trace_buffer_->GetReadIterForSequence(
         trace_buffer_->index_.lower_bound(key));
   }
@@ -126,11 +126,11 @@ class TraceBufferTest : public testing::Test {
     return keys;
   }
 
-  TraceBuffez* trace_buffer() { return trace_buffer_.get(); }
+  TraceBuffer* trace_buffer() { return trace_buffer_.get(); }
   size_t size_to_end() { return trace_buffer_->size_to_end(); }
 
  private:
-  std::unique_ptr<TraceBuffez> trace_buffer_;
+  std::unique_ptr<TraceBuffer> trace_buffer_;
 };
 
 // ----------------------
@@ -827,6 +827,27 @@ TEST_F(TraceBufferTest, Malicious_RepeatedChunkID) {
   ASSERT_THAT(ReadPacket(), IsEmpty());
 }
 
+TEST_F(TraceBufferTest, Malicious_DeclareMorePacketsBeyondBoundaries) {
+  ResetBuffer(4096);
+  SuppressSanityDchecksForTesting();
+  CreateChunk(ProducerID(1), WriterID(1), ChunkID(0))
+      .AddPacket(64, 'a')
+      .IncrementNumPackets()
+      .IncrementNumPackets()
+      .CopyIntoTraceBuffer();
+  CreateChunk(ProducerID(1), WriterID(2), ChunkID(0))
+      .IncrementNumPackets()
+      .CopyIntoTraceBuffer();
+  CreateChunk(ProducerID(1), WriterID(3), ChunkID(0))
+      .AddPacket(32, 'b')
+      .CopyIntoTraceBuffer();
+  trace_buffer()->BeginRead();
+  ASSERT_THAT(ReadPacket(), ElementsAre(FakePacketFragment(64, 'a')));
+  ASSERT_THAT(ReadPacket(), ElementsAre(FakePacketFragment(32, 'b')));
+  ASSERT_THAT(ReadPacket(), IsEmpty());
+  ASSERT_THAT(ReadPacket(), IsEmpty());
+}
+
 TEST_F(TraceBufferTest, Malicious_ZeroVarintHeader) {
   ResetBuffer(4096);
   SuppressSanityDchecksForTesting();
@@ -841,6 +862,22 @@ TEST_F(TraceBufferTest, Malicious_ZeroVarintHeader) {
       .CopyIntoTraceBuffer();
   trace_buffer()->BeginRead();
   ASSERT_THAT(ReadPacket(), ElementsAre(FakePacketFragment(4, 'c')));
+  ASSERT_THAT(ReadPacket(), IsEmpty());
+}
+
+// Forge a chunk where the first packet is valid but the second packet has a
+// varint header that continues beyond the end of the chunk (and also beyond the
+// end of the buffer).
+TEST_F(TraceBufferTest, Malicious_OverflowingVarintHeader) {
+  ResetBuffer(4096);
+  SuppressSanityDchecksForTesting();
+  CreateChunk(ProducerID(1), WriterID(1), ChunkID(0))
+      .AddPacket(4079, 'a')  // 4079 := 4096 - sizeof(ChunkRecord) - 1
+      .AddPacket({0x82})  // 0x8*: that the varint continues on the next byte.
+      .CopyIntoTraceBuffer();
+  trace_buffer()->BeginRead();
+  ASSERT_THAT(ReadPacket(), ElementsAre(FakePacketFragment(4079, 'a')));
+  ASSERT_THAT(ReadPacket(), IsEmpty());
   ASSERT_THAT(ReadPacket(), IsEmpty());
 }
 

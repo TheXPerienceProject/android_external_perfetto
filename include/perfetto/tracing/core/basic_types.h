@@ -29,13 +29,13 @@ using TracingSessionID = uint64_t;
 using ProducerID = uint16_t;
 
 // Unique within the scope of the tracing service.
-using DataSourceID = uint64_t;
-
-// Unique within the scope of the tracing service.
 using DataSourceInstanceID = uint64_t;
 
 // Unique within the scope of a Producer.
 using WriterID = uint16_t;
+
+// Unique within the scope of the tracing service.
+using FlushRequestID = uint64_t;
 
 // We need one FD per producer and we are not going to be able to keep > 64k FDs
 // open in the service.

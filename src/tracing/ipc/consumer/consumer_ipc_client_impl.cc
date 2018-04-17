@@ -23,7 +23,6 @@
 #include "perfetto/ipc/client.h"
 #include "perfetto/tracing/core/consumer.h"
 #include "perfetto/tracing/core/trace_config.h"
-#include "perfetto/tracing/core/trace_packet.h"
 
 // TODO(fmayer): Add a test to check to what happens when ConsumerIPCClientImpl
 // gets destroyed w.r.t. the Consumer pointer. Also think to lifetime of the
@@ -71,8 +70,6 @@ void ConsumerIPCClientImpl::EnableTracing(const TraceConfig& trace_config,
     return;
   }
 
-  // Serialize the |trace_config| into a EnableTracingRequest protobuf.
-  // Keep this in sync with changes in consumer_port.proto.
   protos::EnableTracingRequest req;
   trace_config.ToProto(req.mutable_trace_config());
   ipc::Deferred<protos::EnableTracingResponse> async_response;
@@ -81,8 +78,8 @@ void ConsumerIPCClientImpl::EnableTracing(const TraceConfig& trace_config,
       [weak_this](ipc::AsyncResult<protos::EnableTracingResponse> response) {
         if (!weak_this)
           return;
-        if (!response || response->stopped())
-          weak_this->consumer_->OnTracingStop();
+        if (!response || response->disabled())
+          weak_this->consumer_->OnTracingDisabled();
       });
 
   // |fd| will be closed when this function returns, but it's fine because the
@@ -132,16 +129,15 @@ void ConsumerIPCClientImpl::OnReadBuffersResponse(
     PERFETTO_DLOG("ReadBuffers() failed");
     return;
   }
-  // TODO(primiano): We have to guarantee that the log buffer stays alive at
-  // least as long as these requests are on flights.
   std::vector<TracePacket> trace_packets;
-  trace_packets.reserve(response->trace_packets().size());
-  for (const std::string& bytes : response->trace_packets()) {
-    trace_packets.emplace_back();
-    trace_packets.back().AddSlice(
-        Slice(reinterpret_cast<const void*>(bytes.data()), bytes.size()));
+  for (auto& resp_slice : *response->mutable_slices()) {
+    partial_packet_.AddSlice(
+        Slice(std::unique_ptr<std::string>(resp_slice.release_data())));
+    if (resp_slice.last_slice_for_packet())
+      trace_packets.emplace_back(std::move(partial_packet_));
   }
-  consumer_->OnTraceData(std::move(trace_packets), response.has_more());
+  if (!trace_packets.empty() || !response.has_more())
+    consumer_->OnTraceData(std::move(trace_packets), response.has_more());
 }
 
 void ConsumerIPCClientImpl::FreeBuffers() {
@@ -158,6 +154,22 @@ void ConsumerIPCClientImpl::FreeBuffers() {
           PERFETTO_DLOG("FreeBuffers() failed");
       });
   consumer_port_.FreeBuffers(req, std::move(async_response));
+}
+
+void ConsumerIPCClientImpl::Flush(int timeout_ms, FlushCallback callback) {
+  if (!connected_) {
+    PERFETTO_DLOG("Cannot Flush(), not connected to tracing service");
+    return callback(/*success=*/false);
+  }
+
+  protos::FlushRequest req;
+  req.set_timeout_ms(timeout_ms);
+  ipc::Deferred<protos::FlushResponse> async_response;
+  async_response.Bind(
+      [callback](ipc::AsyncResult<protos::FlushResponse> response) {
+        callback(!!response);
+      });
+  consumer_port_.Flush(req, std::move(async_response));
 }
 
 }  // namespace perfetto

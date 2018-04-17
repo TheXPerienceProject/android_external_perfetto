@@ -22,9 +22,26 @@
 
 #include "perfetto/trace/trace.pb.h"
 #include "perfetto/trace/trace_packet.pb.h"
+#include "perfetto/trace/trusted_packet.pb.h"
 
 namespace perfetto {
 namespace {
+
+static_assert(TracePacket::kPacketFieldNumber ==
+                  protos::Trace::kPacketFieldNumber,
+              "packet field id mismatch");
+
+static_assert(protos::TracePacket::kTrustedUidFieldNumber ==
+                  protos::TrustedPacket::kTrustedUidFieldNumber,
+              "trusted_uid field id mismatch");
+
+static_assert(protos::TracePacket::kTraceConfigFieldNumber ==
+                  protos::TrustedPacket::kTraceConfigFieldNumber,
+              "trace_config field id mismatch");
+
+static_assert(protos::TracePacket::kClockSnapshotFieldNumber ==
+                  protos::TrustedPacket::kClockSnapshotFieldNumber,
+              "clock_snapshot field id mismatch");
 
 TEST(TracePacketTest, Simple) {
   protos::TracePacket proto;
@@ -38,21 +55,9 @@ TEST(TracePacketTest, Simple) {
   ASSERT_EQ(ser_buf.size(), slice->size);
   ASSERT_EQ(tp.slices().end(), ++slice);
 
-  ASSERT_TRUE(tp.Decode());
-  ASSERT_TRUE(tp.Decode());  // Decode() should be idempotent.
-  ASSERT_NE(nullptr, tp.operator->());
-  ASSERT_EQ(proto.for_testing().str(), tp->for_testing().str());
-  ASSERT_EQ(proto.for_testing().str(), (*tp).for_testing().str());
-
-  // Check move operators.
-  TracePacket moved_tp(std::move(tp));
-  ASSERT_NE(nullptr, moved_tp.operator->());
-  ASSERT_EQ(proto.for_testing().str(), moved_tp->for_testing().str());
-
-  TracePacket moved_tp_2;
-  moved_tp_2 = std::move(moved_tp);
-  ASSERT_NE(nullptr, moved_tp_2.operator->());
-  ASSERT_EQ(proto.for_testing().str(), moved_tp_2->for_testing().str());
+  protos::TracePacket decoded_packet;
+  ASSERT_TRUE(tp.Decode(&decoded_packet));
+  ASSERT_EQ(proto.for_testing().str(), decoded_packet.for_testing().str());
 }
 
 TEST(TracePacketTest, Sliced) {
@@ -81,9 +86,9 @@ TEST(TracePacketTest, Sliced) {
 
   ASSERT_EQ(tp.slices().end(), ++slice);
 
-  ASSERT_TRUE(tp.Decode());
-  ASSERT_NE(nullptr, tp.operator->());
-  ASSERT_EQ(proto.for_testing().str(), tp->for_testing().str());
+  protos::TracePacket decoded_packet;
+  ASSERT_TRUE(tp.Decode(&decoded_packet));
+  ASSERT_EQ(proto.for_testing().str(), decoded_packet.for_testing().str());
 }
 
 TEST(TracePacketTest, Corrupted) {
@@ -92,7 +97,8 @@ TEST(TracePacketTest, Corrupted) {
   std::string ser_buf = proto.SerializeAsString();
   TracePacket tp;
   tp.AddSlice({ser_buf.data(), ser_buf.size() - 2});  // corrupted.
-  ASSERT_FALSE(tp.Decode());
+  protos::TracePacket decoded_packet;
+  ASSERT_FALSE(tp.Decode(&decoded_packet));
 }
 
 // Tests that the GetProtoPreamble() logic returns a valid preamble that allows
@@ -129,6 +135,30 @@ TEST(TracePacketTest, GetProtoPreamble) {
   ASSERT_TRUE(trace.ParseFromArray(buf, preamble_size + tp.size()));
   ASSERT_EQ(1, trace.packet_size());
   ASSERT_EQ(payload, trace.packet(0).for_testing().str());
+}
+
+TEST(TracePacketTest, MoveOperators) {
+  char buf1[5]{};
+  char buf2[7]{};
+
+  TracePacket tp;
+  tp.AddSlice(buf1, sizeof(buf1));
+  tp.AddSlice(buf2, sizeof(buf2));
+  tp.AddSlice(Slice::Allocate(11));
+  tp.AddSlice(Slice(std::unique_ptr<std::string>(new std::string("foobar"))));
+
+  TracePacket moved_tp(std::move(tp));
+  ASSERT_EQ(0u, tp.size());
+  ASSERT_TRUE(tp.slices().empty());
+  ASSERT_EQ(4u, moved_tp.slices().size());
+  ASSERT_EQ(5u + 7u + 11u + 6u, moved_tp.size());
+
+  TracePacket moved_tp_2;
+  moved_tp_2 = std::move(moved_tp);
+  ASSERT_EQ(0u, moved_tp.size());
+  ASSERT_TRUE(moved_tp.slices().empty());
+  ASSERT_EQ(4u, moved_tp_2.slices().size());
+  ASSERT_EQ(5u + 7u + 11u + 6u, moved_tp_2.size());
 }
 
 }  // namespace

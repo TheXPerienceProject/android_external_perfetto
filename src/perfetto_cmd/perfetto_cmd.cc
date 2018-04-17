@@ -41,7 +41,8 @@
 #include "perfetto/tracing/core/trace_packet.h"
 
 #include "perfetto/config/trace_config.pb.h"
-#include "perfetto/trace/trace.pb.h"
+
+#include "src/tracing/ipc/default_socket.h"
 
 #include "google/protobuf/io/zero_copy_stream_impl_lite.h"
 
@@ -130,7 +131,7 @@ int PerfettoCmd::Main(int argc, char** argv) {
         test_config.add_buffers()->set_size_kb(4096);
         test_config.set_duration_ms(2000);
         auto* ds_config = test_config.add_data_sources()->mutable_config();
-        ds_config->set_name("com.google.perfetto.ftrace");
+        ds_config->set_name("linux.ftrace");
         ds_config->mutable_ftrace_config()->add_ftrace_events("sched_switch");
         ds_config->mutable_ftrace_config()->add_ftrace_events("cpu_idle");
         ds_config->mutable_ftrace_config()->add_ftrace_events("cpu_frequency");
@@ -138,7 +139,7 @@ int PerfettoCmd::Main(int argc, char** argv) {
         test_config.SerializeToString(&trace_config_raw);
       } else {
         if (!base::ReadFile(optarg, &trace_config_raw)) {
-          PERFETTO_ELOG("Could not open %s", optarg);
+          PERFETTO_PLOG("Could not open %s", optarg);
           return 1;
         }
       }
@@ -232,8 +233,8 @@ int PerfettoCmd::Main(int argc, char** argv) {
   if (!limiter.ShouldTrace(args))
     return 1;
 
-  consumer_endpoint_ = ConsumerIPCClient::Connect(PERFETTO_CONSUMER_SOCK_NAME,
-                                                  this, &task_runner_);
+  consumer_endpoint_ =
+      ConsumerIPCClient::Connect(GetConsumerSocket(), this, &task_runner_);
   SetupCtrlCSignalHandler();
   task_runner_.Run();
 
@@ -259,7 +260,7 @@ void PerfettoCmd::OnConnect() {
   // Failsafe mechanism to avoid waiting indefinitely if the service hangs.
   if (trace_config_->duration_ms()) {
     task_runner_.PostDelayedTask(std::bind(&PerfettoCmd::OnTimeout, this),
-                                 trace_config_->duration_ms() * 2);
+                                 trace_config_->duration_ms() + 10000);
   }
 }
 
@@ -275,14 +276,16 @@ void PerfettoCmd::OnTimeout() {
 
 void PerfettoCmd::OnTraceData(std::vector<TracePacket> packets, bool has_more) {
   for (TracePacket& packet : packets) {
+    uint8_t preamble[16];
+    uint8_t* pos = preamble;
+    // ID of the |packet| field in trace.proto. Hardcoded as this we not depend
+    // on protos/trace:lite for binary size saving reasons.
+    static constexpr uint32_t kPacketFieldNumber = 1;
+    pos = WriteVarInt(MakeTagLengthDelimited(kPacketFieldNumber), pos);
+    pos = WriteVarInt(static_cast<uint32_t>(packet.size()), pos);
+    fwrite(reinterpret_cast<const char*>(preamble), pos - preamble, 1,
+           trace_out_stream_.get());
     for (const Slice& slice : packet.slices()) {
-      uint8_t preamble[16];
-      uint8_t* pos = preamble;
-      pos = WriteVarInt(
-          MakeTagLengthDelimited(protos::Trace::kPacketFieldNumber), pos);
-      pos = WriteVarInt(static_cast<uint32_t>(slice.size), pos);
-      fwrite(reinterpret_cast<const char*>(preamble), pos - preamble, 1,
-             trace_out_stream_.get());
       fwrite(reinterpret_cast<const char*>(slice.start), slice.size, 1,
              trace_out_stream_.get());
     }
@@ -292,7 +295,7 @@ void PerfettoCmd::OnTraceData(std::vector<TracePacket> packets, bool has_more) {
     FinalizeTraceAndExit();  // Reached end of trace.
 }
 
-void PerfettoCmd::OnTracingStop() {
+void PerfettoCmd::OnTracingDisabled() {
   if (trace_config_->write_into_file()) {
     // If write_into_file == true, at this point the passed file contains
     // already all the packets.

@@ -14,22 +14,14 @@
  * limitations under the License.
  */
 
-#include "src/ftrace_reader/test/scattered_stream_null_delegate.h"
+#ifndef SRC_TRACING_IPC_DEFAULT_SOCKET_H_
+#define SRC_TRACING_IPC_DEFAULT_SOCKET_H_
 
 namespace perfetto {
 
-// An implementation of ScatteredStreamWriter::Delegate which always returns
-// the same bit of memory (to better measure performance of users of
-// ScatteredStreamWriter without noisy allocations).
-
-ScatteredStreamNullDelegate::ScatteredStreamNullDelegate(size_t chunk_size)
-    : chunk_size_(chunk_size),
-      chunk_(std::unique_ptr<uint8_t[]>(new uint8_t[chunk_size_])){};
-
-ScatteredStreamNullDelegate::~ScatteredStreamNullDelegate() {}
-
-protozero::ContiguousMemoryRange ScatteredStreamNullDelegate::GetNewBuffer() {
-  return {chunk_.get(), chunk_.get() + chunk_size_};
-}
+const char* GetConsumerSocket();
+const char* GetProducerSocket();
 
 }  // namespace perfetto
+
+#endif  // SRC_TRACING_IPC_DEFAULT_SOCKET_H_

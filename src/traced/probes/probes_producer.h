@@ -22,6 +22,7 @@
 #include <utility>
 
 #include "perfetto/base/task_runner.h"
+#include "perfetto/base/watchdog.h"
 #include "perfetto/ftrace_reader/ftrace_controller.h"
 #include "perfetto/tracing/core/producer.h"
 #include "perfetto/tracing/core/trace_writer.h"
@@ -46,8 +47,10 @@ class ProbesProducer : public Producer {
   void CreateDataSourceInstance(DataSourceInstanceID,
                                 const DataSourceConfig&) override;
   void TearDownDataSourceInstance(DataSourceInstanceID) override;
-  void OnTracingStart() override;
-  void OnTracingStop() override;
+  void OnTracingSetup() override;
+  void Flush(FlushRequestID,
+             const DataSourceInstanceID* data_source_ids,
+             size_t num_data_sources) override;
 
   // Our Impl
   void ConnectWithRetries(const char* socket_name,
@@ -60,7 +63,7 @@ class ProbesProducer : public Producer {
                                             const DataSourceConfig& config);
   void CreateInodeFileDataSourceInstance(TracingSessionID session_id,
                                          DataSourceInstanceID id,
-                                         const DataSourceConfig& config);
+                                         DataSourceConfig config);
 
   void OnMetadata(const FtraceMetadata& metadata);
 
@@ -76,6 +79,8 @@ class ProbesProducer : public Producer {
     ~SinkDelegate() override;
 
     TracingSessionID session_id() const { return session_id_; }
+
+    void Flush();
 
     // FtraceDelegateImpl
     FtraceBundleHandle GetBundleForCpu(size_t cpu) override;
@@ -111,6 +116,7 @@ class ProbesProducer : public Producer {
     // Keep this after the TraceWriter because TracePackets must not outlive
     // their originating writer.
     TraceWriter::TracePacketHandle trace_packet_;
+
     // Keep this last.
     base::WeakPtrFactory<SinkDelegate> weak_factory_;
   };
@@ -126,13 +132,14 @@ class ProbesProducer : public Producer {
   ProbesProducer& operator=(const ProbesProducer&) = delete;
 
   void Connect();
+  void Restart();
   void ResetConnectionBackoff();
   void IncreaseConnectionBackoff();
   void AddWatchdogsTimer(DataSourceInstanceID id,
                          const DataSourceConfig& source_config);
 
   State state_ = kNotStarted;
-  base::TaskRunner* task_runner_;
+  base::TaskRunner* task_runner_ = nullptr;
   std::unique_ptr<Service::ProducerEndpoint> endpoint_ = nullptr;
   std::unique_ptr<FtraceController> ftrace_ = nullptr;
   bool ftrace_creation_failed_ = false;
@@ -146,7 +153,8 @@ class ProbesProducer : public Producer {
   std::map<DataSourceInstanceID, std::unique_ptr<InodeFileDataSource>>
       file_map_sources_;
   LRUInodeCache cache_{kLRUInodeCacheSize};
-  std::map<BlockDeviceID, std::map<Inode, InodeMapValue>> system_inodes_;
+  std::map<BlockDeviceID, std::unordered_map<Inode, InodeMapValue>>
+      system_inodes_;
 };
 
 }  // namespace perfetto
