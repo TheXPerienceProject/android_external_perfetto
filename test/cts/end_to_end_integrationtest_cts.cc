@@ -15,6 +15,7 @@
  */
 
 #include <random>
+#include <sys/system_properties.h>
 
 #include "gtest/gtest.h"
 #include "perfetto/trace/test_event.pbzero.h"
@@ -32,10 +33,21 @@ namespace perfetto {
 class PerfettoCtsTest : public ::testing::Test {
  protected:
   void TestMockProducer(const std::string& producer_name) {
+    // Filter out watches; they do not have the required infrastructure to run
+    // these tests.
+    char chars[PROP_VALUE_MAX + 1];
+    int ret = __system_property_get("ro.build.characteristics", chars);
+    ASSERT_GE(ret, 0);
+    std::string characteristics(chars);
+    if (characteristics.find("watch") != std::string::npos) {
+      return;
+    }
+
     base::TestTaskRunner task_runner;
 
     TestHelper helper(&task_runner);
     helper.ConnectConsumer();
+    helper.WaitForConsumerConnect();
 
     TraceConfig trace_config;
     trace_config.add_buffers()->set_size_kb(1024);
@@ -51,28 +63,22 @@ class PerfettoCtsTest : public ::testing::Test {
     ds_config->mutable_for_testing()->set_seed(kRandomSeed);
     ds_config->mutable_for_testing()->set_message_count(kEventCount);
     ds_config->mutable_for_testing()->set_message_size(kMessageSizeBytes);
+    ds_config->mutable_for_testing()->set_send_batch_on_register(true);
 
-    auto producer_enabled = task_runner.CreateCheckpoint("producer.enabled");
-    task_runner.PostTask(producer_enabled);
     helper.StartTracing(trace_config);
+    helper.WaitForTracingDisabled();
 
-    size_t packets_seen = 0;
+    helper.ReadData();
+    helper.WaitForReadData();
+
+    const auto& packets = helper.trace();
+    ASSERT_EQ(packets.size(), kEventCount);
+
     std::minstd_rand0 rnd_engine(kRandomSeed);
-    auto on_consumer_data = [&packets_seen,
-                             &rnd_engine](const protos::TracePacket& packet) {
+    for (const auto& packet : packets) {
       ASSERT_TRUE(packet.has_for_testing());
       ASSERT_EQ(packet.for_testing().seq_value(), rnd_engine());
-      packets_seen++;
-    };
-    auto on_readback_complete =
-        task_runner.CreateCheckpoint("readback.complete");
-    task_runner.PostDelayedTask(
-        [&on_consumer_data, &on_readback_complete, &helper]() {
-          helper.ReadData(on_consumer_data, on_readback_complete);
-        },
-        1000);
-    task_runner.RunUntilCheckpoint("readback.complete");
-    ASSERT_EQ(packets_seen, kEventCount);
+    }
   }
 };
 
