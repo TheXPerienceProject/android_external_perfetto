@@ -39,6 +39,10 @@ static_assert(protos::TracePacket::kTraceConfigFieldNumber ==
                   protos::TrustedPacket::kTraceConfigFieldNumber,
               "trace_config field id mismatch");
 
+static_assert(protos::TracePacket::kTraceStatsFieldNumber ==
+                  protos::TrustedPacket::kTraceStatsFieldNumber,
+              "trace_stats field id mismatch");
+
 static_assert(protos::TracePacket::kClockSnapshotFieldNumber ==
                   protos::TrustedPacket::kClockSnapshotFieldNumber,
               "clock_snapshot field id mismatch");
@@ -132,7 +136,8 @@ TEST(TracePacketTest, GetProtoPreamble) {
   ASSERT_EQ(1u, tp.slices().size());
   memcpy(&buf[preamble_size], tp.slices()[0].start, tp.slices()[0].size);
   protos::Trace trace;
-  ASSERT_TRUE(trace.ParseFromArray(buf, preamble_size + tp.size()));
+  ASSERT_TRUE(
+      trace.ParseFromArray(buf, static_cast<int>(preamble_size + tp.size())));
   ASSERT_EQ(1, trace.packet_size());
   ASSERT_EQ(payload, trace.packet(0).for_testing().str());
 }

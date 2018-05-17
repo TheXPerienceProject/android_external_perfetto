@@ -34,7 +34,7 @@ class ProcessStatsDataSource {
   ProcessStatsDataSource(TracingSessionID,
                          std::unique_ptr<TraceWriter> writer,
                          const DataSourceConfig&);
-  ~ProcessStatsDataSource();
+  virtual ~ProcessStatsDataSource();
 
   TracingSessionID session_id() const { return session_id_; }
   const DataSourceConfig& config() const { return config_; }
@@ -44,17 +44,33 @@ class ProcessStatsDataSource {
   void OnPids(const std::vector<int32_t>& pids);
   void Flush();
 
- private:
-  static void WriteProcess(int32_t pid, protos::pbzero::ProcessTree*);
+  // Virtual for testing.
+  virtual std::string ReadProcPidFile(int32_t pid, const std::string& file);
 
+ private:
   ProcessStatsDataSource(const ProcessStatsDataSource&) = delete;
   ProcessStatsDataSource& operator=(const ProcessStatsDataSource&) = delete;
+
+  void WriteProcess(int32_t pid, const std::string& proc_status);
+  void WriteThread(int32_t tid, int32_t tgid, const std::string& proc_status);
+  void WriteProcessOrThread(int32_t pid);
+  std::string ReadProcStatusEntry(const std::string& buf, const char* key);
+
+  protos::pbzero::ProcessTree* GetOrCreatePsTree();
+  void FinalizeCurPsTree();
 
   const TracingSessionID session_id_;
   std::unique_ptr<TraceWriter> writer_;
   const DataSourceConfig config_;
+  TraceWriter::TracePacketHandle cur_packet_;
+  protos::pbzero::ProcessTree* cur_ps_tree_ = nullptr;
+
+  // This set contains PIDs as per the Linux kernel notion of a PID (which is
+  // really a TID). In practice this set will contain all TIDs for all processes
+  // seen, not just the main thread id (aka thread group ID).
   // TODO(b/76663469): Optimization: use a bitmap.
   std::set<int32_t> seen_pids_;
+
   base::WeakPtrFactory<ProcessStatsDataSource> weak_factory_;  // Keep last.
 };
 

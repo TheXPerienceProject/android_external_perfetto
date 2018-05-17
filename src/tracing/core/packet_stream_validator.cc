@@ -33,7 +33,7 @@ bool PacketStreamValidator::Validate(const Slices& slices) {
     size += slice.size;
 
   protos::TrustedPacket packet;
-  if (!packet.ParseFromBoundedZeroCopyStream(&stream, size))
+  if (!packet.ParseFromBoundedZeroCopyStream(&stream, static_cast<int>(size)))
     return false;
 
   // Only the service is allowed to fill in the trusted uid.
@@ -44,6 +44,10 @@ bool PacketStreamValidator::Validate(const Slices& slices) {
 
   // Only the service is allowed to fill in the TraceConfig.
   if (packet.has_trace_config())
+    return false;
+
+  // Only the service is allowed to fill in the TraceStats.
+  if (packet.has_trace_stats())
     return false;
 
   // We are deliberately not checking for clock_snapshot for the moment. It's

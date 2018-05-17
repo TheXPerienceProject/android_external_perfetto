@@ -121,7 +121,7 @@ class ServiceImpl : public Service {
     void DisableTracing() override;
     void ReadBuffers() override;
     void FreeBuffers() override;
-    void Flush(int timeout_ms, FlushCallback) override;
+    void Flush(uint32_t timeout_ms, FlushCallback) override;
 
    private:
     friend class ServiceImpl;
@@ -164,7 +164,7 @@ class ServiceImpl : public Service {
                      base::ScopedFile);
   void DisableTracing(TracingSessionID);
   void Flush(TracingSessionID tsid,
-             int timeout_ms,
+             uint32_t timeout_ms,
              ConsumerEndpoint::FlushCallback);
   void FlushAndDisableTracing(TracingSessionID);
   void ReadBuffers(TracingSessionID, ConsumerEndpointImpl*);
@@ -211,7 +211,7 @@ class ServiceImpl : public Service {
 
     size_t num_buffers() const { return buffers_index.size(); }
 
-    int delay_to_next_write_period_ms() const {
+    uint32_t delay_to_next_write_period_ms() const {
       PERFETTO_DCHECK(write_period_ms > 0);
       return write_period_ms -
              (base::GetWallTimeMs().count() % write_period_ms);
@@ -240,6 +240,9 @@ class ServiceImpl : public Service {
     // When the last clock snapshot was emitted into the output stream.
     base::TimeMillis last_clock_snapshot = {};
 
+    // When the last TraceStats snapshot was emitted into the output stream.
+    base::TimeMillis last_stats_snapshot = {};
+
     // Whether we mirrored the trace config back to the trace output yet.
     bool did_emit_config = false;
 
@@ -250,9 +253,9 @@ class ServiceImpl : public Service {
     // trace packets into, rather than returning it to the consumer via
     // OnTraceData().
     base::ScopedFile write_into_file;
-    int write_period_ms = 0;
-    size_t max_file_size_bytes = 0;
-    size_t bytes_written_into_file = 0;
+    uint32_t write_period_ms = 0;
+    uint64_t max_file_size_bytes = 0;
+    uint64_t bytes_written_into_file = 0;
   };
 
   ServiceImpl(const ServiceImpl&) = delete;
@@ -276,6 +279,7 @@ class ServiceImpl : public Service {
 
   void MaybeSnapshotClocks(TracingSession*, std::vector<TracePacket>*);
   void MaybeEmitTraceConfig(TracingSession*, std::vector<TracePacket>*);
+  void MaybeSnapshotStats(TracingSession*, std::vector<TracePacket>*);
   void OnFlushTimeout(TracingSessionID, FlushRequestID);
   TraceBuffer* GetBufferByID(BufferID);
 
@@ -285,6 +289,7 @@ class ServiceImpl : public Service {
   DataSourceInstanceID last_data_source_instance_id_ = 0;
   TracingSessionID last_tracing_session_id_ = 0;
   FlushRequestID last_flush_request_id_ = 0;
+  uid_t uid_ = 0;
 
   // Buffer IDs are global across all consumers (because a Producer can produce
   // data for more than one trace session, hence more than one consumer).
