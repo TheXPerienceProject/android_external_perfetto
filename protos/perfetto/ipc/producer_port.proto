@@ -162,6 +162,11 @@ message InitializeConnectionRequest {
   // the build system that is used to build the code and the repo (standalone
   // vs AOSP). This is intended for human debugging only.
   optional string sdk_version = 8;
+
+  // On Windows, when producer_provided_shmem = true, the client creates a named
+  // SHM region and passes the name (an unguessable token) back to the service.
+  // Introduced in v13.
+  optional string shm_key_windows = 7;
 }
 
 message InitializeConnectionResponse {
@@ -276,6 +281,11 @@ message GetAsyncCommandResponse {
   // the shared memory buffer (not a proto field).
   message SetupTracing {
     optional uint32 shared_buffer_page_size_kb = 1;
+
+    // On Windows, instead, we pass the name (an unguessable token) of a shared
+    // memory region that can be attached by the other process by name.
+    // Introduced in v13.
+    optional string shm_key_windows = 2;
   }
 
   message Flush {

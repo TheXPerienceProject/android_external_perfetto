@@ -30,6 +30,7 @@
 #include "perfetto/ext/base/string_utils.h"
 #include "perfetto/ext/base/subprocess.h"
 #include "perfetto/ext/base/temp_file.h"
+#include "perfetto/ext/base/utils.h"
 #include "perfetto/ext/ipc/basic_types.h"
 #include "perfetto/ext/traced/traced.h"
 #include "perfetto/ext/tracing/core/commit_data_request.h"
@@ -976,7 +977,8 @@ TEST_F(PerfettoTest, QueryServiceStateLargeResponse) {
     DataSourceDescriptor dsd;
     std::string name = "big_ds_" + std::to_string(i);
     dsd.set_name(name);
-    std::string descriptor(ipc::kIPCBufferSize - 64, (' ' + i) % 64);
+    std::string descriptor(ipc::kIPCBufferSize - 64,
+                           static_cast<char>((' ' + i) % 64));
     dsd.set_track_event_descriptor_raw(descriptor);
     ds_expected[name] = std::move(descriptor);
     producer->RegisterDataSource(dsd);
@@ -1220,6 +1222,11 @@ TEST_F(PerfettoCmdlineTest, NoSanitizers(InvalidCases)) {
 
   EXPECT_EQ(1, trace_and_query_2.Run(&stderr_));
   EXPECT_THAT(stderr_, HasSubstr("Cannot specify a trace config"));
+}
+
+TEST_F(PerfettoCmdlineTest, NoSanitizers(Version)) {
+  auto perfetto = ExecPerfetto({"--version"});
+  EXPECT_EQ(0, perfetto.Run(&stderr_)) << stderr_;
 }
 
 TEST_F(PerfettoCmdlineTest, NoSanitizers(TxtConfig)) {

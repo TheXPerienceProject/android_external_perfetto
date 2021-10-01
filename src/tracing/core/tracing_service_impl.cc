@@ -20,9 +20,10 @@
 #include "perfetto/tracing/core/forward_decls.h"
 
 #include <errno.h>
-#include <inttypes.h>
 #include <limits.h>
 #include <string.h>
+
+#include <cinttypes>
 #include <regex>
 #include <unordered_set>
 
@@ -652,6 +653,21 @@ base::Status TracingServiceImpl::EnableTracing(ConsumerEndpointImpl* consumer,
                         PerfettoStatsdAtom::kTracedEnableTracingTooManyBuffers);
     return PERFETTO_SVC_ERR("Too many buffers configured (%d)",
                             cfg.buffers_size());
+  }
+  // Check that the config specifies all buffers for its data sources. This
+  // is also checked in SetupDataSource, but it is simpler to return a proper
+  // error to the consumer from here (and there will be less state to undo).
+  for (const TraceConfig::DataSource& cfg_data_source : cfg.data_sources()) {
+    size_t num_buffers = static_cast<size_t>(cfg.buffers_size());
+    size_t target_buffer = cfg_data_source.config().target_buffer();
+    if (target_buffer >= num_buffers) {
+      MaybeLogUploadEvent(
+          cfg, PerfettoStatsdAtom::kTracedEnableTracingOobTargetBuffer);
+      return PERFETTO_SVC_ERR(
+          "Data source \"%s\" specified an out of bounds target_buffer (%zu >= "
+          "%zu)",
+          cfg_data_source.config().name().c_str(), target_buffer, num_buffers);
+    }
   }
 
   if (!cfg.unique_session_name().empty()) {
