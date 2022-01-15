@@ -122,6 +122,11 @@ void ProbesProducer::OnConnect() {
       proto_desc.set_handles_incremental_state_clear(true);
     endpoint_->RegisterDataSource(proto_desc);
   }
+
+  // Used by tracebox to synchronize with traced_probes being registered.
+  if (all_data_sources_registered_cb_) {
+    endpoint_->Sync(all_data_sources_registered_cb_);
+  }
 }
 
 void ProbesProducer::OnDisconnect() {
@@ -208,7 +213,8 @@ void ProbesProducer::StartDataSource(DataSourceInstanceID instance_id,
   if (config.trace_duration_ms() != 0) {
     uint32_t timeout = 5000 + 2 * config.trace_duration_ms();
     watchdogs_.emplace(
-        instance_id, base::Watchdog::GetInstance()->CreateFatalTimer(timeout));
+        instance_id, base::Watchdog::GetInstance()->CreateFatalTimer(
+                         timeout, base::WatchdogCrashReason::kTraceDidntStop));
   }
   data_source->started = true;
   data_source->Start();
