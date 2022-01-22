@@ -16,6 +16,7 @@
 
 #include "src/trace_processor/importers/systrace/systrace_line_parser.h"
 
+#include "perfetto/ext/base/flat_hash_map.h"
 #include "perfetto/ext/base/string_splitter.h"
 #include "perfetto/ext/base/string_utils.h"
 #include "src/trace_processor/importers/common/args_tracker.h"
@@ -31,7 +32,6 @@
 #include <cctype>
 #include <cinttypes>
 #include <string>
-#include <unordered_map>
 
 namespace perfetto {
 namespace trace_processor {
@@ -45,7 +45,8 @@ SystraceLineParser::SystraceLineParser(TraceProcessorContext* ctx)
       workqueue_name_id_(ctx->storage->InternString("workqueue")),
       sched_blocked_reason_id_(
           ctx->storage->InternString("sched_blocked_reason")),
-      io_wait_id_(ctx->storage->InternString("io_wait")) {}
+      io_wait_id_(ctx->storage->InternString("io_wait")),
+      waker_utid_id_(ctx->storage->InternString("waker_utid")) {}
 
 util::Status SystraceLineParser::ParseLine(const SystraceLine& line) {
   auto utid = context_->process_tracker->UpdateThreadName(
@@ -59,14 +60,14 @@ util::Status SystraceLineParser::ParseLine(const SystraceLine& line) {
     }
   }
 
-  std::unordered_map<std::string, std::string> args;
+  base::FlatHashMap<std::string, std::string> args;
   for (base::StringSplitter ss(line.args_str, ' '); ss.Next();) {
     std::string key;
     std::string value;
     if (!base::Contains(ss.cur_token(), "=")) {
       key = "name";
       value = ss.cur_token();
-      args.emplace(std::move(key), std::move(value));
+      args.Insert(std::move(key), std::move(value));
       continue;
     }
     for (base::StringSplitter inner(ss.cur_token(), '='); inner.Next();) {
@@ -76,7 +77,7 @@ util::Status SystraceLineParser::ParseLine(const SystraceLine& line) {
         value = inner.cur_token();
       }
     }
-    args.emplace(std::move(key), std::move(value));
+    args.Insert(std::move(key), std::move(value));
   }
   if (line.event_name == "sched_switch") {
     auto prev_state_str = args["prev_state"];
@@ -117,8 +118,11 @@ util::Status SystraceLineParser::ParseLine(const SystraceLine& line) {
     StringId event_name_id = line.event_name == "sched_wakeup"
                                  ? sched_wakeup_name_id_
                                  : sched_waking_name_id_;
-    context_->event_tracker->PushInstant(line.ts, event_name_id, wakee_utid,
-                                         RefType::kRefUtid);
+    InstantId instant_id = context_->event_tracker->PushInstant(
+        line.ts, event_name_id, wakee_utid, RefType::kRefUtid);
+    context_->args_tracker->AddArgsTo(instant_id)
+        .AddArg(waker_utid_id_, Variadic::UnsignedInteger(utid));
+
   } else if (line.event_name == "cpu_idle") {
     base::Optional<uint32_t> event_cpu = base::StringToUInt32(args["cpu_id"]);
     base::Optional<double> new_state = base::StringToDouble(args["state"]);

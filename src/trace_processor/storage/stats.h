@@ -124,10 +124,11 @@ namespace stats {
   F(process_tracker_errors,             kSingle,  kError,    kAnalysis, ""),   \
   F(json_tokenizer_failure,             kSingle,  kError,    kTrace,    ""),   \
   F(json_parser_failure,                kSingle,  kError,    kTrace,    ""),   \
-  F(json_display_time_unit_too_late,    kSingle,  kError,    kTrace,           \
-      "The displayTimeUnit key came too late in the JSON trace so was "        \
-      "ignored. Trace processor only supports displayTimeUnit appearing "      \
-      "at the start of JSON traces"),                                          \
+  F(json_display_time_unit,             kSingle,  kInfo,     kTrace,           \
+      "The displayTimeUnit key was set in the JSON trace. In some prior "      \
+      "versions of trace processor this key could effect how the trace "       \
+      "processor parsed timestamps and durations. In this version the key is " \
+      "ignored which more closely matches the bavahiour of catapult."),        \
   F(heap_graph_invalid_string_id,       kIndexed, kError,    kTrace,    ""),   \
   F(heap_graph_non_finalized_graph,     kSingle,  kError,    kTrace,    ""),   \
   F(heap_graph_malformed_packet,        kIndexed, kError,    kTrace,    ""),   \
@@ -187,9 +188,13 @@ namespace stats {
       "processor."),                                                           \
   F(perf_guardrail_stop_ts,             kIndexed, kDataLoss, kTrace,    ""),   \
   F(sorter_push_event_out_of_order,     kSingle, kError,     kTrace,           \
-       "Trace events are out of order event after sorting. This can happen "   \
-       "due to many factors including clock sync drift, producers emitting "   \
-       "events out of order or a bug in trace processor's logic of sorting.")
+      "Trace events are out of order event after sorting. This can happen "    \
+      "due to many factors including clock sync drift, producers emitting "    \
+      "events out of order or a bug in trace processor's logic of sorting."),  \
+  F(unknown_extension_fields,           kSingle,  kError,    kTrace,           \
+      "TraceEvent had unknown extension fields, which might result in "        \
+      "missing some arguments. You may need a newer version of trace "         \
+      "processor to parse them.")
 // clang-format on
 
 enum Type {

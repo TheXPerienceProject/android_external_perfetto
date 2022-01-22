@@ -244,6 +244,7 @@ perfetto_cc_library(
         ":src_tracing_core_service",
         ":src_tracing_ipc_common",
         ":src_tracing_ipc_consumer_consumer",
+        ":src_tracing_ipc_default_socket",
         ":src_tracing_ipc_producer_producer",
         ":src_tracing_ipc_service_service",
     ],
@@ -330,6 +331,15 @@ perfetto_filegroup(
     ],
 )
 
+# GN target: //include/perfetto/ext/base/http:http
+perfetto_filegroup(
+    name = "include_perfetto_ext_base_http_http",
+    srcs = [
+        "include/perfetto/ext/base/http/http_server.h",
+        "include/perfetto/ext/base/http/sha1.h",
+    ],
+)
+
 # GN target: //include/perfetto/ext/base:base
 perfetto_filegroup(
     name = "include_perfetto_ext_base_base",
@@ -343,6 +353,7 @@ perfetto_filegroup(
         "include/perfetto/ext/base/endian.h",
         "include/perfetto/ext/base/event_fd.h",
         "include/perfetto/ext/base/file_utils.h",
+        "include/perfetto/ext/base/flat_hash_map.h",
         "include/perfetto/ext/base/getopt.h",
         "include/perfetto/ext/base/getopt_compat.h",
         "include/perfetto/ext/base/hash.h",
@@ -355,6 +366,7 @@ perfetto_filegroup(
         "include/perfetto/ext/base/pipe.h",
         "include/perfetto/ext/base/scoped_file.h",
         "include/perfetto/ext/base/small_set.h",
+        "include/perfetto/ext/base/small_vector.h",
         "include/perfetto/ext/base/string_splitter.h",
         "include/perfetto/ext/base/string_utils.h",
         "include/perfetto/ext/base/string_view.h",
@@ -637,6 +649,25 @@ perfetto_filegroup(
     srcs = [
         "src/android_stats/perfetto_atoms.h",
     ],
+)
+
+# GN target: //src/base/http:http
+perfetto_cc_library(
+    name = "src_base_http_http",
+    srcs = [
+        "src/base/http/http_server.cc",
+        "src/base/http/sha1.cc",
+    ],
+    hdrs = [
+        ":include_perfetto_base_base",
+        ":include_perfetto_ext_base_base",
+        ":include_perfetto_ext_base_http_http",
+    ],
+    deps = [
+        ":src_base_base",
+        ":src_base_unix_socket",
+    ],
+    linkstatic = True,
 )
 
 # GN target: //src/base:base
@@ -1376,8 +1407,6 @@ perfetto_filegroup(
         "src/trace_processor/importers/json/json_trace_parser.h",
         "src/trace_processor/importers/json/json_trace_tokenizer.cc",
         "src/trace_processor/importers/json/json_trace_tokenizer.h",
-        "src/trace_processor/importers/json/json_tracker.cc",
-        "src/trace_processor/importers/json/json_tracker.h",
         "src/trace_processor/importers/proto/android_probes_module.cc",
         "src/trace_processor/importers/proto/android_probes_module.h",
         "src/trace_processor/importers/proto/android_probes_parser.cc",
@@ -1633,6 +1662,8 @@ perfetto_filegroup(
     srcs = [
         "src/traced/probes/power/android_power_data_source.cc",
         "src/traced/probes/power/android_power_data_source.h",
+        "src/traced/probes/power/linux_power_sysfs_data_source.cc",
+        "src/traced/probes/power/linux_power_sysfs_data_source.h",
     ],
 )
 
@@ -1778,13 +1809,20 @@ perfetto_filegroup(
 perfetto_filegroup(
     name = "src_tracing_ipc_common",
     srcs = [
-        "src/tracing/ipc/default_socket.cc",
         "src/tracing/ipc/memfd.cc",
         "src/tracing/ipc/memfd.h",
         "src/tracing/ipc/posix_shared_memory.cc",
         "src/tracing/ipc/posix_shared_memory.h",
         "src/tracing/ipc/shared_memory_windows.cc",
         "src/tracing/ipc/shared_memory_windows.h",
+    ],
+)
+
+# GN target: //src/tracing/ipc:default_socket
+perfetto_filegroup(
+    name = "src_tracing_ipc_default_socket",
+    srcs = [
+        "src/tracing/ipc/default_socket.cc",
     ],
 )
 
@@ -2826,6 +2864,7 @@ perfetto_proto_library(
         "protos/perfetto/trace/ftrace/sde.proto",
         "protos/perfetto/trace/ftrace/signal.proto",
         "protos/perfetto/trace/ftrace/sync.proto",
+        "protos/perfetto/trace/ftrace/synthetic.proto",
         "protos/perfetto/trace/ftrace/systrace.proto",
         "protos/perfetto/trace/ftrace/task.proto",
         "protos/perfetto/trace/ftrace/test_bundle_wrapper.proto",
@@ -3526,6 +3565,7 @@ perfetto_cc_library(
         ":src_tracing_in_process_backend",
         ":src_tracing_ipc_common",
         ":src_tracing_ipc_consumer_consumer",
+        ":src_tracing_ipc_default_socket",
         ":src_tracing_ipc_producer_producer",
         ":src_tracing_ipc_service_service",
         ":src_tracing_platform_impl",
@@ -3618,6 +3658,7 @@ perfetto_cc_binary(
         ":src_tracing_core_core",
         ":src_tracing_ipc_common",
         ":src_tracing_ipc_consumer_consumer",
+        ":src_tracing_ipc_default_socket",
         ":src_tracing_ipc_producer_producer",
         "src/perfetto_cmd/main.cc",
     ],
@@ -3840,7 +3881,7 @@ perfetto_cc_binary(
                ":protos_perfetto_trace_track_event_zero",
                ":protozero",
                ":src_base_base",
-               ":src_base_unix_socket",
+               ":src_base_http_http",
                ":src_trace_processor_containers_containers",
                ":src_trace_processor_importers_gen_cc_chrome_track_event_descriptor",
                ":src_trace_processor_importers_gen_cc_config_descriptor",
@@ -4186,12 +4227,26 @@ perfetto_py_binary(
     legacy_create_init = 0,
 )
 
+perfetto_py_library(
+    name = "batch_trace_processor",
+    srcs = glob([
+      "tools/batch_trace_processor/perfetto/batch_trace_processor/*.py"
+    ]),
+    deps = [
+        ":trace_processor_py",
+    ] + PERFETTO_CONFIG.deps.pandas_py,
+    imports = [
+        "tools/batch_trace_processor",
+    ],
+)
+
 perfetto_py_binary(
     name = "batch_trace_processor_shell",
     srcs = ["tools/batch_trace_processor/main.py"],
     main = "tools/batch_trace_processor/main.py",
     deps = [
         ":trace_processor_py",
+        ":batch_trace_processor",
     ] + PERFETTO_CONFIG.deps.pandas_py,
     python_version = "PY3",
     legacy_create_init = 0,
