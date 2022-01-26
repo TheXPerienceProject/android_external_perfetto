@@ -56,6 +56,7 @@
 #include "protos/perfetto/trace/ftrace/systrace.pbzero.h"
 #include "protos/perfetto/trace/ftrace/task.pbzero.h"
 #include "protos/perfetto/trace/ftrace/thermal.pbzero.h"
+#include "protos/perfetto/trace/ftrace/vmscan.pbzero.h"
 #include "protos/perfetto/trace/ftrace/workqueue.pbzero.h"
 #include "protos/perfetto/trace/interned_data/interned_data.pbzero.h"
 
@@ -125,6 +126,14 @@ FtraceParser::FtraceParser(TraceProcessorContext* context)
       workqueue_id_(context_->storage->InternString("workqueue")),
       irq_id_(context_->storage->InternString("irq")),
       ret_arg_id_(context_->storage->InternString("ret")),
+      direct_reclaim_nr_reclaimed_id_(
+          context->storage->InternString("direct_reclaim_nr_reclaimed")),
+      direct_reclaim_order_id_(
+          context->storage->InternString("direct_reclaim_order")),
+      direct_reclaim_may_writepage_id_(
+          context->storage->InternString("direct_reclaim_may_writepage")),
+      direct_reclaim_gfp_flags_id_(
+          context->storage->InternString("direct_reclaim_gfp_flags")),
       vec_arg_id_(context->storage->InternString("vec")),
       gpu_mem_total_name_id_(context->storage->InternString("GPU Memory")),
       gpu_mem_total_unit_id_(context->storage->InternString(
@@ -496,6 +505,14 @@ util::Status FtraceParser::ParseFtraceEvent(uint32_t cpu,
       }
       case FtraceEvent::kScmCallEndFieldNumber: {
         ParseScmCallEnd(ts, pid, data);
+        break;
+      }
+      case FtraceEvent::kMmVmscanDirectReclaimBeginFieldNumber: {
+        ParseDirectReclaimBegin(ts, pid, data);
+        break;
+      }
+      case FtraceEvent::kMmVmscanDirectReclaimEndFieldNumber: {
+        ParseDirectReclaimEnd(ts, pid, data);
         break;
       }
       case FtraceEvent::kWorkqueueExecuteStartFieldNumber: {
@@ -877,14 +894,14 @@ void FtraceParser::ParseIonHeapGrowOrShrink(int64_t timestamp,
   StringId change_name_id = ion_change_unknown_id_;
 
   if (ion.has_heap_name()) {
-    char counter_name[255];
     base::StringView heap_name = ion.heap_name();
-    snprintf(counter_name, sizeof(counter_name), "mem.ion.%.*s",
-             int(heap_name.size()), heap_name.data());
-    global_name_id = context_->storage->InternString(counter_name);
-    snprintf(counter_name, sizeof(counter_name), "mem.ion_change.%.*s",
-             int(heap_name.size()), heap_name.data());
-    change_name_id = context_->storage->InternString(counter_name);
+    base::StackString<255> ion_name("mem.ion.%.*s", int(heap_name.size()),
+                                    heap_name.data());
+    global_name_id = context_->storage->InternString(ion_name.string_view());
+
+    base::StackString<255> change_name("mem.ion_change.%.*s",
+                                       int(heap_name.size()), heap_name.data());
+    change_name_id = context_->storage->InternString(change_name.string_view());
   }
 
   // Push the global counter.
@@ -1236,11 +1253,10 @@ void FtraceParser::ClockRate(int64_t timestamp,
                              base::StringView clock_name,
                              base::StringView subtitle,
                              uint64_t rate) {
-  char counter_name[255];
-  snprintf(counter_name, sizeof(counter_name), "%.*s %.*s",
-           int(clock_name.size()), clock_name.data(), int(subtitle.size()),
-           subtitle.data());
-  StringId name = context_->storage->InternString(counter_name);
+  base::StackString<255> counter_name("%.*s %.*s", int(clock_name.size()),
+                                      clock_name.data(), int(subtitle.size()),
+                                      subtitle.data());
+  StringId name = context_->storage->InternString(counter_name.c_str());
   TrackId track = context_->track_tracker->InternGlobalCounterTrack(name);
   context_->event_tracker->PushCounter(timestamp, static_cast<double>(rate),
                                        track);
@@ -1268,6 +1284,50 @@ void FtraceParser::ParseScmCallEnd(int64_t timestamp,
   context_->slice_tracker->End(timestamp, track_id);
 }
 
+void FtraceParser::ParseDirectReclaimBegin(int64_t timestamp,
+                                           uint32_t pid,
+                                           ConstBytes blob) {
+  UniqueTid utid = context_->process_tracker->GetOrCreateThread(pid);
+  TrackId track_id = context_->track_tracker->InternThreadTrack(utid);
+  protos::pbzero::MmVmscanDirectReclaimBeginFtraceEvent::Decoder
+      direct_reclaim_begin(blob.data, blob.size);
+
+  StringId name_id =
+      context_->storage->InternString("mm_vmscan_direct_reclaim");
+
+  auto args_inserter = [this, &direct_reclaim_begin](
+                           ArgsTracker::BoundInserter* inserter) {
+    inserter->AddArg(direct_reclaim_order_id_,
+                     Variadic::Integer(direct_reclaim_begin.order()));
+    inserter->AddArg(direct_reclaim_may_writepage_id_,
+                     Variadic::Integer(direct_reclaim_begin.may_writepage()));
+    inserter->AddArg(
+        direct_reclaim_gfp_flags_id_,
+        Variadic::UnsignedInteger(direct_reclaim_begin.gfp_flags()));
+  };
+  context_->slice_tracker->Begin(timestamp, track_id, kNullStringId, name_id,
+                                 args_inserter);
+}
+
+void FtraceParser::ParseDirectReclaimEnd(int64_t timestamp,
+                                         uint32_t pid,
+                                         ConstBytes blob) {
+  protos::pbzero::ScmCallEndFtraceEvent::Decoder evt(blob.data, blob.size);
+  UniqueTid utid = context_->process_tracker->GetOrCreateThread(pid);
+  TrackId track_id = context_->track_tracker->InternThreadTrack(utid);
+  protos::pbzero::MmVmscanDirectReclaimEndFtraceEvent::Decoder
+      direct_reclaim_end(blob.data, blob.size);
+
+  auto args_inserter =
+      [this, &direct_reclaim_end](ArgsTracker::BoundInserter* inserter) {
+        inserter->AddArg(
+            direct_reclaim_nr_reclaimed_id_,
+            Variadic::UnsignedInteger(direct_reclaim_end.nr_reclaimed()));
+      };
+  context_->slice_tracker->End(timestamp, track_id, kNullStringId,
+                               kNullStringId, args_inserter);
+}
+
 void FtraceParser::ParseWorkqueueExecuteStart(
     int64_t timestamp,
     uint32_t pid,
@@ -1285,10 +1345,8 @@ void FtraceParser::ParseWorkqueueExecuteStart(
     name_id = context_->storage->InternString(
         base::StringView(reinterpret_cast<const char*>(str.data), str.size));
   } else {
-    char slice_name[255];
-    snprintf(slice_name, base::ArraySize(slice_name), "%#" PRIx64,
-             evt.function());
-    name_id = context_->storage->InternString(base::StringView(slice_name));
+    base::StackString<255> slice_name("%#" PRIx64, evt.function());
+    name_id = context_->storage->InternString(slice_name.string_view());
   }
 
   UniqueTid utid = context_->process_tracker->GetOrCreateThread(pid);
@@ -1310,14 +1368,15 @@ void FtraceParser::ParseIrqHandlerEntry(uint32_t cpu,
                                         int64_t timestamp,
                                         protozero::ConstBytes blob) {
   protos::pbzero::IrqHandlerEntryFtraceEvent::Decoder evt(blob.data, blob.size);
-  char track_name[255];
-  snprintf(track_name, sizeof(track_name), "Irq Cpu %d", cpu);
-  StringId track_name_id = context_->storage->InternString(track_name);
-  char slice_name[255];
+  base::StackString<255> track_name("Irq Cpu %d", cpu);
+  StringId track_name_id =
+      context_->storage->InternString(track_name.string_view());
+
   base::StringView irq_name = evt.name();
-  snprintf(slice_name, sizeof(slice_name), "IRQ (%.*s)", int(irq_name.size()),
-           irq_name.data());
-  StringId slice_name_id = context_->storage->InternString(slice_name);
+  base::StackString<255> slice_name("IRQ (%.*s)", int(irq_name.size()),
+                                    irq_name.data());
+  StringId slice_name_id =
+      context_->storage->InternString(slice_name.string_view());
   TrackId track = context_->track_tracker->InternCpuTrack(track_name_id, cpu);
   context_->slice_tracker->Begin(timestamp, track, irq_id_, slice_name_id);
 }
@@ -1326,14 +1385,13 @@ void FtraceParser::ParseIrqHandlerExit(uint32_t cpu,
                                        int64_t timestamp,
                                        protozero::ConstBytes blob) {
   protos::pbzero::IrqHandlerExitFtraceEvent::Decoder evt(blob.data, blob.size);
-  char track_name[255];
-  snprintf(track_name, sizeof(track_name), "Irq Cpu %d", cpu);
-  StringId track_name_id = context_->storage->InternString(track_name);
+  base::StackString<255> track_name("Irq Cpu %d", cpu);
+  StringId track_name_id =
+      context_->storage->InternString(track_name.string_view());
   TrackId track = context_->track_tracker->InternCpuTrack(track_name_id, cpu);
-  char status[255];
-  snprintf(status, sizeof(status), "%s",
-           evt.ret() == 1 ? "handled" : "unhandled");
-  StringId status_id = context_->storage->InternString(status);
+
+  base::StackString<255> status("%s", evt.ret() == 1 ? "handled" : "unhandled");
+  StringId status_id = context_->storage->InternString(status.string_view());
   auto args_inserter = [this,
                         &status_id](ArgsTracker::BoundInserter* inserter) {
     inserter->AddArg(ret_arg_id_, Variadic::String(status_id));
@@ -1345,9 +1403,9 @@ void FtraceParser::ParseSoftIrqEntry(uint32_t cpu,
                                      int64_t timestamp,
                                      protozero::ConstBytes blob) {
   protos::pbzero::SoftirqEntryFtraceEvent::Decoder evt(blob.data, blob.size);
-  char track_name[255];
-  snprintf(track_name, sizeof(track_name), "SoftIrq Cpu %d", cpu);
-  StringId track_name_id = context_->storage->InternString(track_name);
+  base::StackString<255> track_name("SoftIrq Cpu %d", cpu);
+  StringId track_name_id =
+      context_->storage->InternString(track_name.string_view());
   auto num_actions = sizeof(kActionNames) / sizeof(*kActionNames);
   if (evt.vec() >= num_actions) {
     PERFETTO_DFATAL("No action name at index %d for softirq event.", evt.vec());
@@ -1363,9 +1421,9 @@ void FtraceParser::ParseSoftIrqExit(uint32_t cpu,
                                     int64_t timestamp,
                                     protozero::ConstBytes blob) {
   protos::pbzero::SoftirqExitFtraceEvent::Decoder evt(blob.data, blob.size);
-  char track_name[255];
-  snprintf(track_name, sizeof(track_name), "SoftIrq Cpu %d", cpu);
-  StringId track_name_id = context_->storage->InternString(track_name);
+  base::StackString<255> track_name("SoftIrq Cpu %d", cpu);
+  StringId track_name_id =
+      context_->storage->InternString(track_name.string_view());
   TrackId track = context_->track_tracker->InternCpuTrack(track_name_id, cpu);
   auto vec = evt.vec();
   auto args_inserter = [this, vec](ArgsTracker::BoundInserter* inserter) {
@@ -1419,11 +1477,10 @@ void FtraceParser::ParseThermalTemperature(int64_t timestamp,
                                            protozero::ConstBytes blob) {
   protos::pbzero::ThermalTemperatureFtraceEvent::Decoder evt(blob.data,
                                                              blob.size);
-  char counter_name[255];
   base::StringView thermal_zone = evt.thermal_zone();
-  snprintf(counter_name, sizeof(counter_name), "%.*s Temperature",
-           int(thermal_zone.size()), thermal_zone.data());
-  StringId name = context_->storage->InternString(counter_name);
+  base::StackString<255> counter_name(
+      "%.*s Temperature", int(thermal_zone.size()), thermal_zone.data());
+  StringId name = context_->storage->InternString(counter_name.string_view());
   TrackId track = context_->track_tracker->InternGlobalCounterTrack(name);
   context_->event_tracker->PushCounter(timestamp, evt.temp(), track);
 }
@@ -1431,11 +1488,10 @@ void FtraceParser::ParseThermalTemperature(int64_t timestamp,
 void FtraceParser::ParseCdevUpdate(int64_t timestamp,
                                    protozero::ConstBytes blob) {
   protos::pbzero::CdevUpdateFtraceEvent::Decoder evt(blob.data, blob.size);
-  char counter_name[255];
   base::StringView type = evt.type();
-  snprintf(counter_name, sizeof(counter_name), "%.*s Cooling Device",
-           int(type.size()), type.data());
-  StringId name = context_->storage->InternString(counter_name);
+  base::StackString<255> counter_name("%.*s Cooling Device", int(type.size()),
+                                      type.data());
+  StringId name = context_->storage->InternString(counter_name.string_view());
   TrackId track = context_->track_tracker->InternGlobalCounterTrack(name);
   context_->event_tracker->PushCounter(
       timestamp, static_cast<double>(evt.target()), track);
@@ -1476,18 +1532,16 @@ void FtraceParser::ParseFastRpcDmaStat(int64_t timestamp,
   if (0 <= evt.cid() && evt.cid() < static_cast<int32_t>(kFastRpcCounterSize)) {
     name = fast_rpc_delta_names_[static_cast<size_t>(evt.cid())];
   } else {
-    char str[64];
-    snprintf(str, sizeof(str), "mem.fastrpc[%" PRId32 "]", evt.cid());
-    name = context_->storage->InternString(str);
+    base::StackString<64> str("mem.fastrpc[%" PRId32 "]", evt.cid());
+    name = context_->storage->InternString(str.string_view());
   }
 
   StringId total_name;
   if (0 <= evt.cid() && evt.cid() < static_cast<int32_t>(kFastRpcCounterSize)) {
     total_name = fast_rpc_total_names_[static_cast<size_t>(evt.cid())];
   } else {
-    char str[64];
-    snprintf(str, sizeof(str), "mem.fastrpc[%" PRId32 "]", evt.cid());
-    total_name = context_->storage->InternString(str);
+    base::StackString<64> str("mem.fastrpc[%" PRId32 "]", evt.cid());
+    total_name = context_->storage->InternString(str.string_view());
   }
 
   // Push the global counter.

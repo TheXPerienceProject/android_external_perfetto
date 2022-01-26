@@ -999,11 +999,12 @@ class TrackDecider {
       the_tracks.upid,
       the_tracks.utid,
       total_dur as hasSched,
-      hasProfileInfo,
+      hasHeapProfiles,
       process.pid as pid,
       thread.tid as tid,
       process.name as processName,
-      thread.name as threadName
+      thread.name as threadName,
+      process.arg_set_id as argSetId
     from (
       select upid, 0 as utid from process_track
       union
@@ -1038,25 +1039,18 @@ class TrackDecider {
     left join (
       select
         distinct(upid) as upid,
-        true as hasProfileInfo
+        true as hasHeapProfiles
       from heap_profile_allocation
       union
       select
         distinct(upid) as upid,
-        true as hasProfileInfo
+        true as hasHeapProfiles
       from heap_graph_object
-      union
-      select
-        distinct(process.upid) as upid,
-        true as hasProfileInfo
-      from process
-        join thread on process.upid = thread.upid
-        join perf_sample on thread.utid = perf_sample.utid
     ) using (upid)
     left join thread using(utid)
     left join process using(upid)
     order by
-      hasProfileInfo desc,
+      hasHeapProfiles desc,
       total_dur desc,
       total_cycles desc,
       the_tracks.upid,
@@ -1071,7 +1065,8 @@ class TrackDecider {
       threadName: STR_NULL,
       processName: STR_NULL,
       hasSched: NUM_NULL,
-      hasProfileInfo: NUM_NULL,
+      hasHeapProfiles: NUM_NULL,
+      argSetId: NUM_NULL
     });
     for (; it.valid(); it.next()) {
       const utid = it.utid;
@@ -1081,7 +1076,22 @@ class TrackDecider {
       const threadName = it.threadName;
       const processName = it.processName;
       const hasSched = !!it.hasSched;
-      const hasProfileInfo = !!it.hasProfileInfo;
+      const hasHeapProfiles = !!it.hasHeapProfiles;
+
+      const labels = [];
+      if (it.argSetId !== null) {
+        const result = await this.engine.query(`
+          select string_value as label
+          from args
+          where arg_set_id = ${it.argSetId}
+        `);
+        const argIt = result.iter({label: STR_NULL});
+        for (; argIt.valid(); argIt.next()) {
+          if (argIt.label !== null) {
+            labels.push(argIt.label);
+          }
+        }
+      }
 
       // Group by upid if present else by utid.
       let pUuid =
@@ -1102,6 +1112,7 @@ class TrackDecider {
           trackKindPriority: TrackDecider.inferTrackKindPriority(threadName),
           name: `${upid === null ? tid : pid} summary`,
           config: {pidForColor, upid, utid, tid},
+          labels,
         });
 
         const name = TrackDecider.getTrackName(
@@ -1111,7 +1122,10 @@ class TrackDecider {
           summaryTrackId,
           name,
           id: pUuid,
-          collapsed: !hasProfileInfo,
+          // Perf profiling tracks remain collapsed, otherwise we would have too
+          // many expanded process tracks for some perf traces, leading to
+          // jankyness.
+          collapsed: !hasHeapProfiles,
         });
 
         this.addTrackGroupActions.push(addTrackGroup);
