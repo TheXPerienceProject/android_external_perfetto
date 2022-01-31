@@ -258,6 +258,10 @@ enum BuiltinClock {
   BUILTIN_CLOCK_MAX_ID = 63;
 
   reserved 7, 8;
+
+  // An internal CL (ag/16521245) has taken this for BUILTIN_CLOCK_TSC.
+  // That might get upstreamed later on. Avoid diverging on this ID in future.
+  reserved 9;
 }
 
 // End of protos/perfetto/common/builtin_clock.proto
@@ -4888,6 +4892,12 @@ message NetifReceiveSkbFtraceEvent {
   optional string name = 2;
   optional uint64 skbaddr = 3;
 }
+message NetDevXmitFtraceEvent {
+  optional uint32 len = 1;
+  optional string name = 2;
+  optional int32 rc = 3;
+  optional uint64 skbaddr = 4;
+}
 
 // End of protos/perfetto/trace/ftrace/net.proto
 
@@ -5655,6 +5665,7 @@ message FtraceEvent {
     SdeSdePerfUpdateBusFtraceEvent sde_sde_perf_update_bus = 358;
     RssStatThrottledFtraceEvent rss_stat_throttled = 359;
     NetifReceiveSkbFtraceEvent netif_receive_skb = 360;
+    NetDevXmitFtraceEvent net_dev_xmit = 361;
   }
 }
 
