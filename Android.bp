@@ -3679,6 +3679,7 @@ genrule {
         "protos/perfetto/metrics/android/hwcomposer.proto",
         "protos/perfetto/metrics/android/hwui_metric.proto",
         "protos/perfetto/metrics/android/ion_metric.proto",
+        "protos/perfetto/metrics/android/irq_runtime_metric.proto",
         "protos/perfetto/metrics/android/jank_metric.proto",
         "protos/perfetto/metrics/android/java_heap_histogram.proto",
         "protos/perfetto/metrics/android/java_heap_stats.proto",
@@ -3692,6 +3693,7 @@ genrule {
         "protos/perfetto/metrics/android/powrails_metric.proto",
         "protos/perfetto/metrics/android/process_metadata.proto",
         "protos/perfetto/metrics/android/profiler_smaps.proto",
+        "protos/perfetto/metrics/android/rt_runtime_metric.proto",
         "protos/perfetto/metrics/android/simpleperf.proto",
         "protos/perfetto/metrics/android/startup_metric.proto",
         "protos/perfetto/metrics/android/surfaceflinger.proto",
@@ -3738,6 +3740,7 @@ genrule {
         "protos/perfetto/metrics/android/hwcomposer.proto",
         "protos/perfetto/metrics/android/hwui_metric.proto",
         "protos/perfetto/metrics/android/ion_metric.proto",
+        "protos/perfetto/metrics/android/irq_runtime_metric.proto",
         "protos/perfetto/metrics/android/jank_metric.proto",
         "protos/perfetto/metrics/android/java_heap_histogram.proto",
         "protos/perfetto/metrics/android/java_heap_stats.proto",
@@ -3751,6 +3754,7 @@ genrule {
         "protos/perfetto/metrics/android/powrails_metric.proto",
         "protos/perfetto/metrics/android/process_metadata.proto",
         "protos/perfetto/metrics/android/profiler_smaps.proto",
+        "protos/perfetto/metrics/android/rt_runtime_metric.proto",
         "protos/perfetto/metrics/android/simpleperf.proto",
         "protos/perfetto/metrics/android/startup_metric.proto",
         "protos/perfetto/metrics/android/surfaceflinger.proto",
@@ -8083,6 +8087,7 @@ genrule {
         "src/trace_processor/metrics/sql/android/android_hwui_metric.sql",
         "src/trace_processor/metrics/sql/android/android_hwui_threads.sql",
         "src/trace_processor/metrics/sql/android/android_ion.sql",
+        "src/trace_processor/metrics/sql/android/android_irq_runtime.sql",
         "src/trace_processor/metrics/sql/android/android_jank.sql",
         "src/trace_processor/metrics/sql/android/android_lmk.sql",
         "src/trace_processor/metrics/sql/android/android_lmk_reason.sql",
@@ -8094,6 +8099,7 @@ genrule {
         "src/trace_processor/metrics/sql/android/android_package_list.sql",
         "src/trace_processor/metrics/sql/android/android_powrails.sql",
         "src/trace_processor/metrics/sql/android/android_proxy_power.sql",
+        "src/trace_processor/metrics/sql/android/android_rt_runtime.sql",
         "src/trace_processor/metrics/sql/android/android_simpleperf.sql",
         "src/trace_processor/metrics/sql/android/android_startup.sql",
         "src/trace_processor/metrics/sql/android/android_surfaceflinger.sql",
@@ -10419,14 +10425,14 @@ python_library {
 
 filegroup {
     name: "perfetto-trace-processor-python-srcs",
-    srcs: ["src/trace_processor/python/perfetto/**/*.py"],
-    path: "src/trace_processor/python",
+    srcs: ["python/perfetto/trace_processor/*.py"],
+    path: "python",
 }
 
 filegroup {
     name: "perfetto-trace-processor-python-data",
-    srcs: ["src/trace_processor/python/perfetto/**/*.descriptor*"],
-    path: "src/trace_processor/python",
+    srcs: ["python/perfetto/trace_processor/*.descriptor*"],
+    path: "python",
 }
 
 // Added automatically by a large-scale-change that took the approach of
