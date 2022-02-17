@@ -211,6 +211,9 @@ void Watchdog::SetCpuLimit(uint32_t percentage, uint32_t window_ms) {
 }
 
 void Watchdog::ThreadMain() {
+  // Register crash keys explicitly to avoid running out of slots at crash time.
+  g_crash_key_reason.Register();
+
   base::ScopedFile stat_fd(base::OpenFile("/proc/self/stat", O_RDONLY));
   if (!stat_fd) {
     PERFETTO_ELOG("Failed to open stat file to enforce resource limits.");

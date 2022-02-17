@@ -133,7 +133,9 @@ export class TrackGroupPanel extends Panel<Attrs> {
             {
               title: name,
             },
-            name),
+            name,
+            ('namespace' in this.summaryTrackState.config) &&
+                m('span.chip', 'metric')),
           selection && selection.kind === 'AREA' ?
               m('i.material-icons.track-button',
                 {
@@ -166,6 +168,9 @@ export class TrackGroupPanel extends Panel<Attrs> {
     } else {
       this.backgroundColor =
           getComputedStyle(dom).getPropertyValue('--expanded-background');
+    }
+    if (this.summaryTrack !== undefined) {
+      this.summaryTrack.onFullRedraw();
     }
   }
 

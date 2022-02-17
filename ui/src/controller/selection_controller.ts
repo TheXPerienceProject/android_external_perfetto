@@ -282,7 +282,7 @@ export class SelectionController extends Controller<'main'> {
       const row = result.firstRow({
         ts: NUM,
         dur: NUM,
-        state: STR,
+        state: STR_NULL,
         ioWait: NUM_NULL,
         utid: NUM,
         cpu: NUM_NULL,
@@ -293,7 +293,7 @@ export class SelectionController extends Controller<'main'> {
       const timeFromStart = fromNs(ts) - globals.state.traceTime.startSec;
       const dur = fromNs(row.dur);
       const ioWait = row.ioWait === null ? undefined : row.ioWait > 0;
-      const state = translateState(row.state, ioWait);
+      const state = translateState(row.state || undefined, ioWait);
       const utid = row.utid;
       const cpu = row.cpu === null ? undefined : row.cpu;
       const sliceId = row.id === null ? undefined : row.id;
@@ -378,7 +378,8 @@ export class SelectionController extends Controller<'main'> {
     const delta = value - previousValue;
     const duration = endTs - ts;
     const startTime = fromNs(ts) - globals.state.traceTime.startSec;
-    const name = globals.state.tracks[trackId].name;
+    const uiTrackId = globals.state.uiTrackIdByTraceTrackId.get(trackId);
+    const name = uiTrackId ? globals.state.tracks[uiTrackId].name : undefined;
     return {startTime, value, delta, duration, name};
   }
 
@@ -416,10 +417,22 @@ export class SelectionController extends Controller<'main'> {
     }
     // Find the sched slice with the utid of the waker running when the
     // sched wakeup occurred. This is the waker.
-    const queryWaker = `select utid, cpu from sched where utid =
-    (select utid from raw where name = '${event}' and ts = ${wakeupTs})
+    let queryWaker = `select utid, cpu from sched where utid =
+    (select EXTRACT_ARG(arg_set_id, 'waker_utid') from instants where name =
+     '${event}' and ts = ${wakeupTs})
     and ts < ${wakeupTs} and ts + dur >= ${wakeupTs};`;
-    const wakerResult = await this.args.engine.query(queryWaker);
+    let wakerResult = await this.args.engine.query(queryWaker);
+    if (wakerResult.numRows() === 0) {
+      // An old version of trace processor (that does not populate the
+      // 'waker_utid' arg) might be in use. Try getting the same info from the
+      // raw table).
+      // TODO(b/206390308): Remove this workaround when
+      // TRACE_PROCESSOR_CURRENT_API_VERSION is incremented.
+      queryWaker = `select utid, cpu from sched where utid =
+      (select utid from raw where name = '${event}' and ts = ${wakeupTs})
+      and ts < ${wakeupTs} and ts + dur >= ${wakeupTs};`;
+      wakerResult =  await this.args.engine.query(queryWaker);
+    }
     if (wakerResult.numRows() === 0) {
       return undefined;
     }
