@@ -109,7 +109,7 @@ TEST(SubprocessTest, BothStdoutAndStderr) {
 TEST(SubprocessTest, CatInputModeDevNull) {
   std::string ignored_input = "ignored input";
 #if PERFETTO_BUILDFLAG(PERFETTO_OS_WIN)
-  Subprocess p({"cmd", "/C", "findstr ."});
+  Subprocess p({"cmd", "/C", "findstr . || exit 0"});
 #else
   Subprocess p({"cat", "-"});
 #endif
@@ -216,7 +216,7 @@ TEST(SubprocessTest, CatLargeFile) {
 TEST(SubprocessTest, Timeout) {
 #if PERFETTO_BUILDFLAG(PERFETTO_OS_WIN)
   Subprocess p({"ping", "127.0.0.1", "-n", "60"});
-  p.args.stdout_mode = Subprocess::kDevNull;
+  p.args.stdout_mode = Subprocess::OutputMode::kDevNull;
 #else
   Subprocess p({"sleep", "60"});
 #endif
@@ -229,7 +229,7 @@ TEST(SubprocessTest, Timeout) {
 TEST(SubprocessTest, TimeoutNotHit) {
 #if PERFETTO_BUILDFLAG(PERFETTO_OS_WIN)
   Subprocess p({"ping", "127.0.0.1", "-n", "1"});
-  p.args.stdout_mode = Subprocess::kDevNull;
+  p.args.stdout_mode = Subprocess::OutputMode::kDevNull;
 #else
   Subprocess p({"sleep", "0.01"});
 #endif

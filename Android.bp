@@ -223,10 +223,8 @@ cc_library_shared {
     srcs: [
         ":perfetto_include_perfetto_base_base",
         ":perfetto_include_perfetto_ext_base_base",
-        ":perfetto_include_perfetto_profiling_normalize",
         ":perfetto_src_base_base",
         ":perfetto_src_base_unix_socket",
-        ":perfetto_src_profiling_common_proc_utils",
         ":perfetto_src_profiling_memory_client",
         ":perfetto_src_profiling_memory_client_api",
         ":perfetto_src_profiling_memory_ring_buffer",
@@ -2934,21 +2932,6 @@ genrule {
     ],
 }
 
-// GN: //protos/perfetto/config:merged_config_descriptor
-genrule {
-    name: "perfetto_protos_perfetto_config_merged_config_descriptor",
-    srcs: [
-        "protos/perfetto/config/perfetto_config.proto",
-    ],
-    tools: [
-        "aprotoc",
-    ],
-    cmd: "mkdir -p $(genDir)/external/perfetto/ && $(location aprotoc) --proto_path=external/perfetto --descriptor_set_out=$(out) $(in)",
-    out: [
-        "perfetto_protos_perfetto_config_merged_config_descriptor.bin",
-    ],
-}
-
 // GN: //protos/perfetto/config/power:cpp
 genrule {
     name: "perfetto_protos_perfetto_config_power_cpp_gen",
@@ -4177,6 +4160,7 @@ genrule {
         "protos/perfetto/trace/ftrace/ipi.proto",
         "protos/perfetto/trace/ftrace/irq.proto",
         "protos/perfetto/trace/ftrace/kmem.proto",
+        "protos/perfetto/trace/ftrace/kvm.proto",
         "protos/perfetto/trace/ftrace/lowmemorykiller.proto",
         "protos/perfetto/trace/ftrace/mali.proto",
         "protos/perfetto/trace/ftrace/mdss.proto",
@@ -4190,6 +4174,7 @@ genrule {
         "protos/perfetto/trace/ftrace/scm.proto",
         "protos/perfetto/trace/ftrace/sde.proto",
         "protos/perfetto/trace/ftrace/signal.proto",
+        "protos/perfetto/trace/ftrace/skb.proto",
         "protos/perfetto/trace/ftrace/sock.proto",
         "protos/perfetto/trace/ftrace/sync.proto",
         "protos/perfetto/trace/ftrace/synthetic.proto",
@@ -4399,6 +4384,7 @@ genrule {
         "protos/perfetto/trace/ftrace/ipi.proto",
         "protos/perfetto/trace/ftrace/irq.proto",
         "protos/perfetto/trace/ftrace/kmem.proto",
+        "protos/perfetto/trace/ftrace/kvm.proto",
         "protos/perfetto/trace/ftrace/lowmemorykiller.proto",
         "protos/perfetto/trace/ftrace/mali.proto",
         "protos/perfetto/trace/ftrace/mdss.proto",
@@ -4412,6 +4398,7 @@ genrule {
         "protos/perfetto/trace/ftrace/scm.proto",
         "protos/perfetto/trace/ftrace/sde.proto",
         "protos/perfetto/trace/ftrace/signal.proto",
+        "protos/perfetto/trace/ftrace/skb.proto",
         "protos/perfetto/trace/ftrace/sock.proto",
         "protos/perfetto/trace/ftrace/sync.proto",
         "protos/perfetto/trace/ftrace/synthetic.proto",
@@ -4455,6 +4442,7 @@ genrule {
         "external/perfetto/protos/perfetto/trace/ftrace/ipi.gen.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/irq.gen.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/kmem.gen.cc",
+        "external/perfetto/protos/perfetto/trace/ftrace/kvm.gen.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/lowmemorykiller.gen.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/mali.gen.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/mdss.gen.cc",
@@ -4468,6 +4456,7 @@ genrule {
         "external/perfetto/protos/perfetto/trace/ftrace/scm.gen.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/sde.gen.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/signal.gen.cc",
+        "external/perfetto/protos/perfetto/trace/ftrace/skb.gen.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/sock.gen.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/sync.gen.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/synthetic.gen.cc",
@@ -4511,6 +4500,7 @@ genrule {
         "protos/perfetto/trace/ftrace/ipi.proto",
         "protos/perfetto/trace/ftrace/irq.proto",
         "protos/perfetto/trace/ftrace/kmem.proto",
+        "protos/perfetto/trace/ftrace/kvm.proto",
         "protos/perfetto/trace/ftrace/lowmemorykiller.proto",
         "protos/perfetto/trace/ftrace/mali.proto",
         "protos/perfetto/trace/ftrace/mdss.proto",
@@ -4524,6 +4514,7 @@ genrule {
         "protos/perfetto/trace/ftrace/scm.proto",
         "protos/perfetto/trace/ftrace/sde.proto",
         "protos/perfetto/trace/ftrace/signal.proto",
+        "protos/perfetto/trace/ftrace/skb.proto",
         "protos/perfetto/trace/ftrace/sock.proto",
         "protos/perfetto/trace/ftrace/sync.proto",
         "protos/perfetto/trace/ftrace/synthetic.proto",
@@ -4567,6 +4558,7 @@ genrule {
         "external/perfetto/protos/perfetto/trace/ftrace/ipi.gen.h",
         "external/perfetto/protos/perfetto/trace/ftrace/irq.gen.h",
         "external/perfetto/protos/perfetto/trace/ftrace/kmem.gen.h",
+        "external/perfetto/protos/perfetto/trace/ftrace/kvm.gen.h",
         "external/perfetto/protos/perfetto/trace/ftrace/lowmemorykiller.gen.h",
         "external/perfetto/protos/perfetto/trace/ftrace/mali.gen.h",
         "external/perfetto/protos/perfetto/trace/ftrace/mdss.gen.h",
@@ -4580,6 +4572,7 @@ genrule {
         "external/perfetto/protos/perfetto/trace/ftrace/scm.gen.h",
         "external/perfetto/protos/perfetto/trace/ftrace/sde.gen.h",
         "external/perfetto/protos/perfetto/trace/ftrace/signal.gen.h",
+        "external/perfetto/protos/perfetto/trace/ftrace/skb.gen.h",
         "external/perfetto/protos/perfetto/trace/ftrace/sock.gen.h",
         "external/perfetto/protos/perfetto/trace/ftrace/sync.gen.h",
         "external/perfetto/protos/perfetto/trace/ftrace/synthetic.gen.h",
@@ -4627,6 +4620,7 @@ genrule {
         "protos/perfetto/trace/ftrace/ipi.proto",
         "protos/perfetto/trace/ftrace/irq.proto",
         "protos/perfetto/trace/ftrace/kmem.proto",
+        "protos/perfetto/trace/ftrace/kvm.proto",
         "protos/perfetto/trace/ftrace/lowmemorykiller.proto",
         "protos/perfetto/trace/ftrace/mali.proto",
         "protos/perfetto/trace/ftrace/mdss.proto",
@@ -4640,6 +4634,7 @@ genrule {
         "protos/perfetto/trace/ftrace/scm.proto",
         "protos/perfetto/trace/ftrace/sde.proto",
         "protos/perfetto/trace/ftrace/signal.proto",
+        "protos/perfetto/trace/ftrace/skb.proto",
         "protos/perfetto/trace/ftrace/sock.proto",
         "protos/perfetto/trace/ftrace/sync.proto",
         "protos/perfetto/trace/ftrace/synthetic.proto",
@@ -4682,6 +4677,7 @@ genrule {
         "external/perfetto/protos/perfetto/trace/ftrace/ipi.pb.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/irq.pb.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/kmem.pb.cc",
+        "external/perfetto/protos/perfetto/trace/ftrace/kvm.pb.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/lowmemorykiller.pb.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/mali.pb.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/mdss.pb.cc",
@@ -4695,6 +4691,7 @@ genrule {
         "external/perfetto/protos/perfetto/trace/ftrace/scm.pb.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/sde.pb.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/signal.pb.cc",
+        "external/perfetto/protos/perfetto/trace/ftrace/skb.pb.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/sock.pb.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/sync.pb.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/synthetic.pb.cc",
@@ -4738,6 +4735,7 @@ genrule {
         "protos/perfetto/trace/ftrace/ipi.proto",
         "protos/perfetto/trace/ftrace/irq.proto",
         "protos/perfetto/trace/ftrace/kmem.proto",
+        "protos/perfetto/trace/ftrace/kvm.proto",
         "protos/perfetto/trace/ftrace/lowmemorykiller.proto",
         "protos/perfetto/trace/ftrace/mali.proto",
         "protos/perfetto/trace/ftrace/mdss.proto",
@@ -4751,6 +4749,7 @@ genrule {
         "protos/perfetto/trace/ftrace/scm.proto",
         "protos/perfetto/trace/ftrace/sde.proto",
         "protos/perfetto/trace/ftrace/signal.proto",
+        "protos/perfetto/trace/ftrace/skb.proto",
         "protos/perfetto/trace/ftrace/sock.proto",
         "protos/perfetto/trace/ftrace/sync.proto",
         "protos/perfetto/trace/ftrace/synthetic.proto",
@@ -4793,6 +4792,7 @@ genrule {
         "external/perfetto/protos/perfetto/trace/ftrace/ipi.pb.h",
         "external/perfetto/protos/perfetto/trace/ftrace/irq.pb.h",
         "external/perfetto/protos/perfetto/trace/ftrace/kmem.pb.h",
+        "external/perfetto/protos/perfetto/trace/ftrace/kvm.pb.h",
         "external/perfetto/protos/perfetto/trace/ftrace/lowmemorykiller.pb.h",
         "external/perfetto/protos/perfetto/trace/ftrace/mali.pb.h",
         "external/perfetto/protos/perfetto/trace/ftrace/mdss.pb.h",
@@ -4806,6 +4806,7 @@ genrule {
         "external/perfetto/protos/perfetto/trace/ftrace/scm.pb.h",
         "external/perfetto/protos/perfetto/trace/ftrace/sde.pb.h",
         "external/perfetto/protos/perfetto/trace/ftrace/signal.pb.h",
+        "external/perfetto/protos/perfetto/trace/ftrace/skb.pb.h",
         "external/perfetto/protos/perfetto/trace/ftrace/sock.pb.h",
         "external/perfetto/protos/perfetto/trace/ftrace/sync.pb.h",
         "external/perfetto/protos/perfetto/trace/ftrace/synthetic.pb.h",
@@ -4853,6 +4854,7 @@ genrule {
         "protos/perfetto/trace/ftrace/ipi.proto",
         "protos/perfetto/trace/ftrace/irq.proto",
         "protos/perfetto/trace/ftrace/kmem.proto",
+        "protos/perfetto/trace/ftrace/kvm.proto",
         "protos/perfetto/trace/ftrace/lowmemorykiller.proto",
         "protos/perfetto/trace/ftrace/mali.proto",
         "protos/perfetto/trace/ftrace/mdss.proto",
@@ -4866,6 +4868,7 @@ genrule {
         "protos/perfetto/trace/ftrace/scm.proto",
         "protos/perfetto/trace/ftrace/sde.proto",
         "protos/perfetto/trace/ftrace/signal.proto",
+        "protos/perfetto/trace/ftrace/skb.proto",
         "protos/perfetto/trace/ftrace/sock.proto",
         "protos/perfetto/trace/ftrace/sync.proto",
         "protos/perfetto/trace/ftrace/synthetic.proto",
@@ -4909,6 +4912,7 @@ genrule {
         "external/perfetto/protos/perfetto/trace/ftrace/ipi.pbzero.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/irq.pbzero.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/kmem.pbzero.cc",
+        "external/perfetto/protos/perfetto/trace/ftrace/kvm.pbzero.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/lowmemorykiller.pbzero.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/mali.pbzero.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/mdss.pbzero.cc",
@@ -4922,6 +4926,7 @@ genrule {
         "external/perfetto/protos/perfetto/trace/ftrace/scm.pbzero.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/sde.pbzero.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/signal.pbzero.cc",
+        "external/perfetto/protos/perfetto/trace/ftrace/skb.pbzero.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/sock.pbzero.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/sync.pbzero.cc",
         "external/perfetto/protos/perfetto/trace/ftrace/synthetic.pbzero.cc",
@@ -4965,6 +4970,7 @@ genrule {
         "protos/perfetto/trace/ftrace/ipi.proto",
         "protos/perfetto/trace/ftrace/irq.proto",
         "protos/perfetto/trace/ftrace/kmem.proto",
+        "protos/perfetto/trace/ftrace/kvm.proto",
         "protos/perfetto/trace/ftrace/lowmemorykiller.proto",
         "protos/perfetto/trace/ftrace/mali.proto",
         "protos/perfetto/trace/ftrace/mdss.proto",
@@ -4978,6 +4984,7 @@ genrule {
         "protos/perfetto/trace/ftrace/scm.proto",
         "protos/perfetto/trace/ftrace/sde.proto",
         "protos/perfetto/trace/ftrace/signal.proto",
+        "protos/perfetto/trace/ftrace/skb.proto",
         "protos/perfetto/trace/ftrace/sock.proto",
         "protos/perfetto/trace/ftrace/sync.proto",
         "protos/perfetto/trace/ftrace/synthetic.proto",
@@ -5021,6 +5028,7 @@ genrule {
         "external/perfetto/protos/perfetto/trace/ftrace/ipi.pbzero.h",
         "external/perfetto/protos/perfetto/trace/ftrace/irq.pbzero.h",
         "external/perfetto/protos/perfetto/trace/ftrace/kmem.pbzero.h",
+        "external/perfetto/protos/perfetto/trace/ftrace/kvm.pbzero.h",
         "external/perfetto/protos/perfetto/trace/ftrace/lowmemorykiller.pbzero.h",
         "external/perfetto/protos/perfetto/trace/ftrace/mali.pbzero.h",
         "external/perfetto/protos/perfetto/trace/ftrace/mdss.pbzero.h",
@@ -5034,6 +5042,7 @@ genrule {
         "external/perfetto/protos/perfetto/trace/ftrace/scm.pbzero.h",
         "external/perfetto/protos/perfetto/trace/ftrace/sde.pbzero.h",
         "external/perfetto/protos/perfetto/trace/ftrace/signal.pbzero.h",
+        "external/perfetto/protos/perfetto/trace/ftrace/skb.pbzero.h",
         "external/perfetto/protos/perfetto/trace/ftrace/sock.pbzero.h",
         "external/perfetto/protos/perfetto/trace/ftrace/sync.pbzero.h",
         "external/perfetto/protos/perfetto/trace/ftrace/synthetic.pbzero.h",
@@ -7235,11 +7244,11 @@ filegroup {
 genrule {
     name: "perfetto_src_perfetto_cmd_gen_cc_config_descriptor",
     srcs: [
-        ":perfetto_protos_perfetto_config_merged_config_descriptor",
+        ":perfetto_protos_perfetto_config_descriptor",
     ],
     cmd: "$(location tools/gen_cc_proto_descriptor.py) --gen_dir=$(genDir) --cpp_out=$(out) $(in)",
     out: [
-        "src/perfetto_cmd/perfetto_config.descriptor.h",
+        "src/perfetto_cmd/config.descriptor.h",
     ],
     tool_files: [
         "tools/gen_cc_proto_descriptor.py",
@@ -9178,28 +9187,6 @@ filegroup {
     ],
 }
 
-// GN: //tools/trace_to_text:common
-filegroup {
-    name: "perfetto_tools_trace_to_text_common",
-    srcs: [
-        "tools/trace_to_text/deobfuscate_profile.cc",
-        "tools/trace_to_text/main.cc",
-        "tools/trace_to_text/symbolize_profile.cc",
-        "tools/trace_to_text/trace_to_hprof.cc",
-        "tools/trace_to_text/trace_to_json.cc",
-        "tools/trace_to_text/trace_to_profile.cc",
-        "tools/trace_to_text/trace_to_systrace.cc",
-    ],
-}
-
-// GN: //tools/trace_to_text:full
-filegroup {
-    name: "perfetto_tools_trace_to_text_full",
-    srcs: [
-        "tools/trace_to_text/proto_full_utils.cc",
-    ],
-}
-
 // GN: //tools/trace_to_text:gen_cc_trace_descriptor
 genrule {
     name: "perfetto_tools_trace_to_text_gen_cc_trace_descriptor",
@@ -9215,27 +9202,33 @@ genrule {
     ],
 }
 
+// GN: //tools/trace_to_text:lib
+filegroup {
+    name: "perfetto_tools_trace_to_text_lib",
+    srcs: [
+        "tools/trace_to_text/deobfuscate_profile.cc",
+        "tools/trace_to_text/symbolize_profile.cc",
+        "tools/trace_to_text/trace_to_hprof.cc",
+        "tools/trace_to_text/trace_to_json.cc",
+        "tools/trace_to_text/trace_to_profile.cc",
+        "tools/trace_to_text/trace_to_systrace.cc",
+        "tools/trace_to_text/trace_to_text.cc",
+    ],
+}
+
+// GN: //tools/trace_to_text:main
+filegroup {
+    name: "perfetto_tools_trace_to_text_main",
+    srcs: [
+        "tools/trace_to_text/main.cc",
+    ],
+}
+
 // GN: //tools/trace_to_text:pprofbuilder
 filegroup {
     name: "perfetto_tools_trace_to_text_pprofbuilder",
     srcs: [
         "tools/trace_to_text/pprof_builder.cc",
-    ],
-}
-
-// GN: //tools/trace_to_text:trace_to_text_lib
-filegroup {
-    name: "perfetto_tools_trace_to_text_trace_to_text_lib",
-    srcs: [
-        "tools/trace_to_text/trace_to_text.cc",
-    ],
-}
-
-// GN: //tools/trace_to_text:unittests
-filegroup {
-    name: "perfetto_tools_trace_to_text_unittests",
-    srcs: [
-        "tools/trace_to_text/trace_to_text_unittest.cc",
     ],
 }
 
@@ -9509,7 +9502,6 @@ cc_test {
         ":perfetto_src_profiling_perf_producer_unittests",
         ":perfetto_src_profiling_perf_regs_parsing",
         ":perfetto_src_profiling_perf_unwinding",
-        ":perfetto_src_profiling_symbolizer_symbolize_database",
         ":perfetto_src_profiling_symbolizer_symbolizer",
         ":perfetto_src_profiling_symbolizer_unittests",
         ":perfetto_src_profiling_unittests",
@@ -9610,9 +9602,6 @@ cc_test {
         ":perfetto_src_tracing_test_tracing_integration_test",
         ":perfetto_src_tracing_unittests",
         ":perfetto_tools_sanitizers_unittests_sanitizers_unittests",
-        ":perfetto_tools_trace_to_text_trace_to_text_lib",
-        ":perfetto_tools_trace_to_text_unittests",
-        ":perfetto_tools_trace_to_text_utils",
     ],
     shared_libs: [
         "libandroidicu",
@@ -9738,7 +9727,6 @@ cc_test {
         "perfetto_src_traced_probes_ftrace_test_messages_cpp_gen_headers",
         "perfetto_src_traced_probes_ftrace_test_messages_lite_gen_headers",
         "perfetto_src_traced_probes_ftrace_test_messages_zero_gen_headers",
-        "perfetto_tools_trace_to_text_gen_cc_trace_descriptor",
     ],
     defaults: [
         "perfetto_defaults",
@@ -10012,14 +10000,12 @@ cc_binary_host {
         ":perfetto_src_trace_processor_util_proto_to_args_parser",
         ":perfetto_src_trace_processor_util_protozero_to_text",
         ":perfetto_src_trace_processor_util_util",
-        ":perfetto_tools_trace_to_text_common",
-        ":perfetto_tools_trace_to_text_full",
+        ":perfetto_tools_trace_to_text_lib",
+        ":perfetto_tools_trace_to_text_main",
         ":perfetto_tools_trace_to_text_pprofbuilder",
-        ":perfetto_tools_trace_to_text_trace_to_text_lib",
         ":perfetto_tools_trace_to_text_utils",
     ],
     static_libs: [
-        "libprotobuf-cpp-full",
         "libsqlite",
         "libz",
     ],
