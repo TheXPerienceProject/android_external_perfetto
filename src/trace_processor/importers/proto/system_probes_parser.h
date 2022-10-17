@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "perfetto/protozero/field.h"
+#include "protos/perfetto/trace/sys_stats/sys_stats.pbzero.h"
 #include "src/trace_processor/storage/trace_storage.h"
 
 namespace perfetto {
@@ -44,6 +45,7 @@ class SystemProbesParser {
 
  private:
   void ParseThreadStats(int64_t timestamp, uint32_t pid, ConstBytes);
+  void ParseDiskStats(int64_t ts, ConstBytes blob);
   inline bool IsValidCpuFreqIndex(uint32_t freq) const;
 
   TraceProcessorContext* const context_;
@@ -76,6 +78,15 @@ class SystemProbesParser {
   std::array<StringId, kProcStatsProcessSize> proc_stats_process_names_{};
 
   uint64_t ms_per_tick_ = 0;
+
+  int64_t prev_read_amount = -1;
+  int64_t prev_write_amount = -1;
+  int64_t prev_discard_amount = -1;
+  int64_t prev_flush_count = -1;
+  int64_t prev_read_time = -1;
+  int64_t prev_write_time = -1;
+  int64_t prev_discard_time = -1;
+  int64_t prev_flush_time = -1;
 
   // Maps CPU frequency indices to frequencies from the cpu_freq table to be
   // stored in the args table as a dimension of the time_in_state counter.
