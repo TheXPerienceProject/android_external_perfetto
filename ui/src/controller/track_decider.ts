@@ -60,6 +60,8 @@ const TRACKS_V2_FLAG = featureFlags.register({
 const MEM_DMA_COUNTER_NAME = 'mem.dma_heap';
 const MEM_DMA = 'mem.dma_buffer';
 const MEM_ION = 'mem.ion';
+const DISK_IOSTAT_TAG = 'diskstat.';
+const DISK_IOSTAT_GROUP_NAME = 'diskstat';
 
 export async function decideTracks(
     engineId: string, engine: Engine): Promise<DeferredAction[]> {
@@ -406,6 +408,55 @@ class TrackDecider {
       collapsed: true,
     });
     this.addTrackGroupActions.push(addGroup);
+  }
+
+  async groupGlobalIostatTracks(tag: string, group: string): Promise<void> {
+    const iostatTracks: AddTrackArgs[] = [];
+    const devMap = new Map<string, string>();
+
+    for (const track of this.tracksToAdd) {
+      if (track.name.startsWith(tag)) {
+        iostatTracks.push(track);
+      }
+    }
+
+    if (iostatTracks.length === 0) {
+      return;
+    }
+
+    for (const track of iostatTracks) {
+      const name = track.name.split('.', 3);
+
+      if (!devMap.has(name[1])) {
+        devMap.set(name[1], uuidv4());
+      }
+      track.name = name[2];
+      track.trackGroup = devMap.get(name[1]);
+    }
+
+    for (const [key, value] of devMap) {
+      const groupName = group + key;
+      const summaryTrackId = uuidv4();
+
+      this.tracksToAdd.push({
+        id: summaryTrackId,
+        engineId: this.engineId,
+        kind: NULL_TRACK_KIND,
+        trackSortKey: PrimaryTrackSortKey.NULL_TRACK,
+        name: groupName,
+        trackGroup: undefined,
+        config: {},
+      });
+
+      const addGroup = Actions.addTrackGroup({
+        engineId: this.engineId,
+        summaryTrackId,
+        name: groupName,
+        id: value,
+        collapsed: true,
+      });
+      this.addTrackGroupActions.push(addGroup);
+    }
   }
 
   async addLogsTrack(): Promise<void> {
@@ -1214,6 +1265,7 @@ class TrackDecider {
     await this.addCpuPerfCounterTracks();
     await this.addAnnotationTracks();
     await this.groupGlobalIonTracks();
+    await this.groupGlobalIostatTracks(DISK_IOSTAT_TAG, DISK_IOSTAT_GROUP_NAME);
 
     // Create the per-process track groups. Note that this won't necessarily
     // create a track per process. If a process has been completely idle and has
