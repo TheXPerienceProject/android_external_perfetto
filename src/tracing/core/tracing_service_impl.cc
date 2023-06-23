@@ -613,6 +613,15 @@ base::Status TracingServiceImpl::EnableTracing(ConsumerEndpointImpl* consumer,
         cfg.trigger_config().trigger_timeout_ms());
   }
 
+  // This check has been introduced in May 2023 after finding b/274931668.
+  if (static_cast<int>(cfg.trigger_config().trigger_mode()) >
+      TraceConfig::TriggerConfig::TriggerMode_MAX) {
+    MaybeLogUploadEvent(
+        cfg, PerfettoStatsdAtom::kTracedEnableTracingInvalidTriggerMode);
+    return PERFETTO_SVC_ERR(
+        "The trace config specified an invalid trigger_mode");
+  }
+
   if (has_trigger_config && cfg.duration_ms() != 0) {
     MaybeLogUploadEvent(
         cfg, PerfettoStatsdAtom::kTracedEnableTracingDurationWithTrigger);
@@ -664,12 +673,16 @@ base::Status TracingServiceImpl::EnableTracing(ConsumerEndpointImpl* consumer,
       }
       buf_size_sum += buf.size_kb();
     }
-    if (buf_size_sum > kGuardrailsMaxTracingBufferSizeKb) {
+
+    uint32_t max_tracing_buffer_size_kb =
+        std::max(kGuardrailsMaxTracingBufferSizeKb,
+                 cfg.guardrail_overrides().max_tracing_buffer_size_kb());
+    if (buf_size_sum > max_tracing_buffer_size_kb) {
       MaybeLogUploadEvent(
           cfg, PerfettoStatsdAtom::kTracedEnableTracingBufferSizeTooLarge);
       return PERFETTO_SVC_ERR("Requested too large trace buffer (%" PRIu64
                               "kB  > %" PRIu32 " kB)",
-                              buf_size_sum, kGuardrailsMaxTracingBufferSizeKb);
+                              buf_size_sum, max_tracing_buffer_size_kb);
     }
   }
 
@@ -940,6 +953,9 @@ base::Status TracingServiceImpl::EnableTracing(ConsumerEndpointImpl* consumer,
       tracing_session->config.set_duration_ms(
           cfg.trigger_config().trigger_timeout_ms());
       break;
+
+      // The case of unknown modes (coming from future versions of the service)
+      // is handled few lines above (search for TriggerMode_MAX).
   }
 
   tracing_session->state = TracingSession::CONFIGURED;
