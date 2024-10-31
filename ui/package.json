@@ -42,7 +42,7 @@
     "node-watch": "^0.7.1",
     "pixelmatch": "^5.2.1",
     "puppeteer": "^10.0.0",
-    "rollup": "^2.38.5",
+    "rollup": "^2.79.2",
     "rollup-plugin-re": "^1.0.7",
     "rollup-plugin-sourcemaps": "^0.6.3",
     "tslib": "^2.2.0",
